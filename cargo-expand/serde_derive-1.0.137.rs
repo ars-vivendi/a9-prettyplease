@@ -42,6 +42,7 @@
 )]
 #[prelude_import]
 use ::std::prelude::rust_2015::*;
+
 #[macro_use]
 extern crate std;
 #[macro_use]
@@ -50,6 +51,7 @@ extern crate quote;
 extern crate syn;
 extern crate proc_macro;
 extern crate proc_macro2;
+
 mod internals {
     pub mod ast {
         use internals::attr;
@@ -57,6 +59,7 @@ mod internals {
         use internals::{Ctxt, Derive};
         use syn;
         use syn::punctuated::Punctuated;
+
         pub struct Container<'a> {
             pub ident: syn::Ident,
             pub attrs: attr::Container,
@@ -64,10 +67,12 @@ mod internals {
             pub generics: &'a syn::Generics,
             pub original: &'a syn::DeriveInput,
         }
+
         pub enum Data<'a> {
             Enum(Vec<Variant<'a>>),
             Struct(Style, Vec<Field<'a>>),
         }
+
         pub struct Variant<'a> {
             pub ident: syn::Ident,
             pub attrs: attr::Variant,
@@ -75,21 +80,25 @@ mod internals {
             pub fields: Vec<Field<'a>>,
             pub original: &'a syn::Variant,
         }
+
         pub struct Field<'a> {
             pub member: syn::Member,
             pub attrs: attr::Field,
             pub ty: &'a syn::Type,
             pub original: &'a syn::Field,
         }
+
         pub enum Style {
             Struct,
             Tuple,
             Newtype,
             Unit,
         }
+
         #[automatically_derived]
         #[allow(unused_qualifications)]
         impl ::core::marker::Copy for Style {}
+
         #[automatically_derived]
         #[allow(unused_qualifications)]
         impl ::core::clone::Clone for Style {
@@ -98,6 +107,7 @@ mod internals {
                 { *self }
             }
         }
+
         impl<'a> Container<'a> {
             pub fn from_ast(
                 cx: &Ctxt,
@@ -105,6 +115,7 @@ mod internals {
                 derive: Derive,
             ) -> Option<Container<'a>> {
                 let mut attrs = attr::Container::from_ast(cx, item);
+
                 let mut data = match &item.data {
                     syn::Data::Enum(data) => {
                         Data::Enum(enum_from_ast(cx, &data.variants, attrs.default()))
@@ -116,6 +127,7 @@ mod internals {
                             None,
                             attrs.default(),
                         );
+
                         Data::Struct(style, fields)
                     }
                     syn::Data::Union(_) => {
@@ -126,15 +138,19 @@ mod internals {
                         return None;
                     }
                 };
+
                 let mut has_flatten = false;
+
                 match &mut data {
                     Data::Enum(variants) => {
                         for variant in variants {
                             variant.attrs.rename_by_rules(attrs.rename_all_rules());
+
                             for field in &mut variant.fields {
                                 if field.attrs.flatten() {
                                     has_flatten = true;
                                 }
+
                                 field
                                     .attrs
                                     .rename_by_rules(variant.attrs.rename_all_rules());
@@ -146,13 +162,16 @@ mod internals {
                             if field.attrs.flatten() {
                                 has_flatten = true;
                             }
+
                             field.attrs.rename_by_rules(attrs.rename_all_rules());
                         }
                     }
                 }
+
                 if has_flatten {
                     attrs.mark_has_flatten();
                 }
+
                 let mut item = Container {
                     ident: item.ident.clone(),
                     attrs,
@@ -160,10 +179,12 @@ mod internals {
                     generics: &item.generics,
                     original: item,
                 };
+
                 check::check(cx, &mut item, derive);
                 Some(item)
             }
         }
+
         impl<'a> Data<'a> {
             pub fn all_fields(&'a self) -> Box<dyn Iterator<Item = &'a Field<'a>> + 'a> {
                 match self {
@@ -175,10 +196,12 @@ mod internals {
                     Data::Struct(_, fields) => Box::new(fields.iter()),
                 }
             }
+
             pub fn has_getter(&self) -> bool {
                 self.all_fields().any(|f| f.attrs.getter().is_some())
             }
         }
+
         fn enum_from_ast<'a>(
             cx: &Ctxt,
             variants: &'a Punctuated<syn::Variant, ::syn::token::Comma>,
@@ -194,6 +217,7 @@ mod internals {
                         Some(&attrs),
                         container_default,
                     );
+
                     Variant {
                         ident: variant.ident.clone(),
                         attrs,
@@ -204,6 +228,7 @@ mod internals {
                 })
                 .collect()
         }
+
         fn struct_from_ast<'a>(
             cx: &Ctxt,
             fields: &'a syn::Fields,
@@ -232,6 +257,7 @@ mod internals {
                 syn::Fields::Unit => (Style::Unit, Vec::new()),
             }
         }
+
         fn fields_from_ast<'a>(
             cx: &Ctxt,
             fields: &'a Punctuated<syn::Field, ::syn::token::Comma>,
@@ -253,14 +279,17 @@ mod internals {
                 .collect()
         }
     }
+
     pub mod attr {
         use internals::respan::respan;
         use internals::symbol::*;
         use internals::{ungroup, Ctxt};
         use proc_macro2::{Spacing, Span, TokenStream, TokenTree};
         use quote::ToTokens;
+
         use std::borrow::Cow;
         use std::collections::BTreeSet;
+
         use syn;
         use syn::parse::{self, Parse, ParseStream};
         use syn::punctuated::Punctuated;
@@ -268,12 +297,14 @@ mod internals {
         use syn::Meta::{List, NameValue, Path};
         use syn::NestedMeta::{Lit, Meta};
         pub use internals::case::RenameRule;
+
         struct Attr<'c, T> {
             cx: &'c Ctxt,
             name: Symbol,
             tokens: TokenStream,
             value: Option<T>,
         }
+
         impl<'c, T> Attr<'c, T> {
             fn none(cx: &'c Ctxt, name: Symbol) -> Self {
                 Attr {
@@ -283,8 +314,10 @@ mod internals {
                     value: None,
                 }
             }
+
             fn set<A: ToTokens>(&mut self, obj: A, value: T) {
                 let tokens = obj.into_token_stream();
+
                 if self.value.is_some() {
                     self.cx
                         .error_spanned_by(
@@ -296,6 +329,7 @@ mod internals {
                                         &[::core::fmt::ArgumentV1::new_display(&self.name)],
                                     ),
                                 );
+
                                 res
                             },
                         );
@@ -304,19 +338,23 @@ mod internals {
                     self.value = Some(value);
                 }
             }
+
             fn set_opt<A: ToTokens>(&mut self, obj: A, value: Option<T>) {
                 if let Some(value) = value {
                     self.set(obj, value);
                 }
             }
+
             fn set_if_none(&mut self, value: T) {
                 if self.value.is_none() {
                     self.value = Some(value);
                 }
             }
+
             fn get(self) -> Option<T> {
                 self.value
             }
+
             fn get_with_tokens(self) -> Option<(TokenStream, T)> {
                 match self.value {
                     Some(v) => Some((self.tokens, v)),
@@ -324,24 +362,30 @@ mod internals {
                 }
             }
         }
+
         struct BoolAttr<'c>(Attr<'c, ()>);
+
         impl<'c> BoolAttr<'c> {
             fn none(cx: &'c Ctxt, name: Symbol) -> Self {
                 BoolAttr(Attr::none(cx, name))
             }
+
             fn set_true<A: ToTokens>(&mut self, obj: A) {
                 self.0.set(obj, ());
             }
+
             fn get(&self) -> bool {
                 self.0.value.is_some()
             }
         }
+
         struct VecAttr<'c, T> {
             cx: &'c Ctxt,
             name: Symbol,
             first_dup_tokens: TokenStream,
             values: Vec<T>,
         }
+
         impl<'c, T> VecAttr<'c, T> {
             fn none(cx: &'c Ctxt, name: Symbol) -> Self {
                 VecAttr {
@@ -351,15 +395,19 @@ mod internals {
                     values: Vec::new(),
                 }
             }
+
             fn insert<A: ToTokens>(&mut self, obj: A, value: T) {
                 if self.values.len() == 1 {
                     self.first_dup_tokens = obj.into_token_stream();
                 }
+
                 self.values.push(value);
             }
+
             fn at_most_one(mut self) -> Result<Option<T>, ()> {
                 if self.values.len() > 1 {
                     let dup_token = self.first_dup_tokens;
+
                     self.cx
                         .error_spanned_by(
                             dup_token,
@@ -370,6 +418,7 @@ mod internals {
                                         &[::core::fmt::ArgumentV1::new_display(&self.name)],
                                     ),
                                 );
+
                                 res
                             },
                         );
@@ -378,10 +427,12 @@ mod internals {
                     Ok(self.values.pop())
                 }
             }
+
             fn get(self) -> Vec<T> {
                 self.values
             }
         }
+
         pub struct Name {
             serialize: String,
             serialize_renamed: bool,
@@ -389,10 +440,12 @@ mod internals {
             deserialize_renamed: bool,
             deserialize_aliases: Vec<String>,
         }
+
         #[allow(deprecated)]
         fn unraw(ident: &Ident) -> String {
             ident.to_string().trim_left_matches("r#").to_owned()
         }
+
         impl Name {
             fn from_attrs(
                 source_name: String,
@@ -403,17 +456,21 @@ mod internals {
                 let deserialize_aliases = match de_aliases {
                     Some(de_aliases) => {
                         let mut alias_list = BTreeSet::new();
+
                         for alias_name in de_aliases.get() {
                             alias_list.insert(alias_name);
                         }
+
                         alias_list.into_iter().collect()
                     }
                     None => Vec::new(),
                 };
+
                 let ser_name = ser_name.get();
                 let ser_renamed = ser_name.is_some();
                 let de_name = de_name.get();
                 let de_renamed = de_name.is_some();
+
                 Name {
                     serialize: ser_name.unwrap_or_else(|| source_name.clone()),
                     serialize_renamed: ser_renamed,
@@ -422,25 +479,33 @@ mod internals {
                     deserialize_aliases,
                 }
             }
+
             pub fn serialize_name(&self) -> String {
                 self.serialize.clone()
             }
+
             pub fn deserialize_name(&self) -> String {
                 self.deserialize.clone()
             }
+
             fn deserialize_aliases(&self) -> Vec<String> {
                 let mut aliases = self.deserialize_aliases.clone();
+
                 let main_name = self.deserialize_name();
+
                 if !aliases.contains(&main_name) {
                     aliases.push(main_name);
                 }
+
                 aliases
             }
         }
+
         pub struct RenameAllRules {
             serialize: RenameRule,
             deserialize: RenameRule,
         }
+
         pub struct Container {
             name: Name,
             transparent: bool,
@@ -460,20 +525,24 @@ mod internals {
             is_packed: bool,
             expecting: Option<String>,
         }
+
         pub enum TagType {
             External,
             Internal { tag: String },
             Adjacent { tag: String, content: String },
             None,
         }
+
         pub enum Identifier {
             No,
             Field,
             Variant,
         }
+
         #[automatically_derived]
         #[allow(unused_qualifications)]
         impl ::core::marker::Copy for Identifier {}
+
         #[automatically_derived]
         #[allow(unused_qualifications)]
         impl ::core::clone::Clone for Identifier {
@@ -482,7 +551,9 @@ mod internals {
                 { *self }
             }
         }
+
         impl Identifier {}
+
         impl Container {
             pub fn from_ast(cx: &Ctxt, item: &syn::DeriveInput) -> Self {
                 let mut ser_name = Attr::none(cx, RENAME);
@@ -505,6 +576,7 @@ mod internals {
                 let mut variant_identifier = BoolAttr::none(cx, VARIANT_IDENTIFIER);
                 let mut serde_path = Attr::none(cx, CRATE);
                 let mut expecting = Attr::none(cx, EXPECTING);
+
                 for meta_item in item
                     .attrs
                     .iter()
@@ -545,6 +617,7 @@ mod internals {
                                         Err(err) => cx.error_spanned_by(ser, err),
                                     }
                                 }
+
                                 if let Some(de) = de {
                                     match RenameRule::from_str(&de.value()) {
                                         Ok(rename_rule) => {
@@ -760,6 +833,7 @@ mod internals {
                                 .into_token_stream()
                                 .to_string()
                                 .replace(' ', "");
+
                             cx.error_spanned_by(
                                 meta_item.path(),
                                 {
@@ -769,6 +843,7 @@ mod internals {
                                             &[::core::fmt::ArgumentV1::new_display(&path)],
                                         ),
                                     );
+
                                     res
                                 },
                             );
@@ -781,7 +856,9 @@ mod internals {
                         }
                     }
                 }
+
                 let mut is_packed = false;
+
                 for attr in &item.attrs {
                     if attr.path.is_ident("repr") {
                         let _ = attr
@@ -791,10 +868,12 @@ mod internals {
                                         is_packed |= ident == "packed";
                                     }
                                 }
+
                                 Ok(())
                             });
                     }
                 }
+
                 Container {
                     name: Name::from_attrs(unraw(&item.ident), ser_name, de_name, None),
                     transparent: transparent.get(),
@@ -823,63 +902,82 @@ mod internals {
                     expecting: expecting.get(),
                 }
             }
+
             pub fn name(&self) -> &Name {
                 &self.name
             }
+
             pub fn rename_all_rules(&self) -> &RenameAllRules {
                 &self.rename_all_rules
             }
+
             pub fn transparent(&self) -> bool {
                 self.transparent
             }
+
             pub fn deny_unknown_fields(&self) -> bool {
                 self.deny_unknown_fields
             }
+
             pub fn default(&self) -> &Default {
                 &self.default
             }
+
             pub fn ser_bound(&self) -> Option<&[syn::WherePredicate]> {
                 self.ser_bound.as_ref().map(|vec| &vec[..])
             }
+
             pub fn de_bound(&self) -> Option<&[syn::WherePredicate]> {
                 self.de_bound.as_ref().map(|vec| &vec[..])
             }
+
             pub fn tag(&self) -> &TagType {
                 &self.tag
             }
+
             pub fn type_from(&self) -> Option<&syn::Type> {
                 self.type_from.as_ref()
             }
+
             pub fn type_try_from(&self) -> Option<&syn::Type> {
                 self.type_try_from.as_ref()
             }
+
             pub fn type_into(&self) -> Option<&syn::Type> {
                 self.type_into.as_ref()
             }
+
             pub fn remote(&self) -> Option<&syn::Path> {
                 self.remote.as_ref()
             }
+
             pub fn is_packed(&self) -> bool {
                 self.is_packed
             }
+
             pub fn identifier(&self) -> Identifier {
                 self.identifier
             }
+
             pub fn has_flatten(&self) -> bool {
                 self.has_flatten
             }
+
             pub fn mark_has_flatten(&mut self) {
                 self.has_flatten = true;
             }
+
             pub fn custom_serde_path(&self) -> Option<&syn::Path> {
                 self.serde_path.as_ref()
             }
+
             pub fn serde_path(&self) -> Cow<syn::Path> {
                 self.custom_serde_path()
                     .map_or_else(
                         || Cow::Owned(
                             ::syn::parse_quote::parse({
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "_serde");
                                 _s
                             }),
@@ -887,10 +985,12 @@ mod internals {
                         Cow::Borrowed,
                     )
             }
+
             pub fn expecting(&self) -> Option<&str> {
                 self.expecting.as_ref().map(String::as_ref)
             }
         }
+
         fn decide_tag(
             cx: &Ctxt,
             item: &syn::DeriveInput,
@@ -922,6 +1022,7 @@ mod internals {
                             }
                         }
                     }
+
                     TagType::Internal { tag }
                 }
                 (Some((untagged_tokens, _)), Some((tag_tokens, _)), None) => {
@@ -977,6 +1078,7 @@ mod internals {
                 }
             }
         }
+
         fn decide_identifier(
             cx: &Ctxt,
             item: &syn::DeriveInput,
@@ -1052,6 +1154,7 @@ mod internals {
                 }
             }
         }
+
         pub struct Variant {
             name: Name,
             rename_all_rules: RenameAllRules,
@@ -1064,6 +1167,7 @@ mod internals {
             deserialize_with: Option<syn::ExprPath>,
             borrow: Option<syn::Meta>,
         }
+
         impl Variant {
             pub fn from_ast(cx: &Ctxt, variant: &syn::Variant) -> Self {
                 let mut ser_name = Attr::none(cx, RENAME);
@@ -1079,6 +1183,7 @@ mod internals {
                 let mut serialize_with = Attr::none(cx, SERIALIZE_WITH);
                 let mut deserialize_with = Attr::none(cx, DESERIALIZE_WITH);
                 let mut borrow = Attr::none(cx, BORROW);
+
                 for meta_item in variant
                     .attrs
                     .iter()
@@ -1096,6 +1201,7 @@ mod internals {
                         Meta(List(m)) if m.path == RENAME => {
                             if let Ok((ser, de)) = get_multiple_renames(cx, &m.nested) {
                                 ser_name.set_opt(&m.path, ser.map(syn::LitStr::value));
+
                                 for de_value in de {
                                     de_name.set_if_none(de_value.value());
                                     de_aliases.insert(&m.path, de_value.value());
@@ -1128,6 +1234,7 @@ mod internals {
                                         Err(err) => cx.error_spanned_by(ser, err),
                                     }
                                 }
+
                                 if let Some(de) = de {
                                     match RenameRule::from_str(&de.value()) {
                                         Ok(rename_rule) => {
@@ -1175,12 +1282,15 @@ mod internals {
                                 &m.lit,
                             ) {
                                 let mut ser_path = path.clone();
+
                                 ser_path
                                     .path
                                     .segments
                                     .push(Ident::new("serialize", Span::call_site()).into());
                                 serialize_with.set(&m.path, ser_path);
+
                                 let mut de_path = path;
+
                                 de_path
                                     .path
                                     .segments
@@ -1227,6 +1337,7 @@ mod internals {
                                 .into_token_stream()
                                 .to_string()
                                 .replace(' ', "");
+
                             cx.error_spanned_by(
                                 meta_item.path(),
                                 {
@@ -1236,6 +1347,7 @@ mod internals {
                                             &[::core::fmt::ArgumentV1::new_display(&path)],
                                         ),
                                     );
+
                                     res
                                 },
                             );
@@ -1248,6 +1360,7 @@ mod internals {
                         }
                     }
                 }
+
                 Variant {
                     name: Name::from_attrs(
                         unraw(&variant.ident),
@@ -1269,49 +1382,62 @@ mod internals {
                     borrow: borrow.get(),
                 }
             }
+
             pub fn name(&self) -> &Name {
                 &self.name
             }
+
             pub fn aliases(&self) -> Vec<String> {
                 self.name.deserialize_aliases()
             }
+
             pub fn rename_by_rules(&mut self, rules: &RenameAllRules) {
                 if !self.name.serialize_renamed {
                     self.name.serialize = rules
                         .serialize
                         .apply_to_variant(&self.name.serialize);
                 }
+
                 if !self.name.deserialize_renamed {
                     self.name.deserialize = rules
                         .deserialize
                         .apply_to_variant(&self.name.deserialize);
                 }
             }
+
             pub fn rename_all_rules(&self) -> &RenameAllRules {
                 &self.rename_all_rules
             }
+
             pub fn ser_bound(&self) -> Option<&[syn::WherePredicate]> {
                 self.ser_bound.as_ref().map(|vec| &vec[..])
             }
+
             pub fn de_bound(&self) -> Option<&[syn::WherePredicate]> {
                 self.de_bound.as_ref().map(|vec| &vec[..])
             }
+
             pub fn skip_deserializing(&self) -> bool {
                 self.skip_deserializing
             }
+
             pub fn skip_serializing(&self) -> bool {
                 self.skip_serializing
             }
+
             pub fn other(&self) -> bool {
                 self.other
             }
+
             pub fn serialize_with(&self) -> Option<&syn::ExprPath> {
                 self.serialize_with.as_ref()
             }
+
             pub fn deserialize_with(&self) -> Option<&syn::ExprPath> {
                 self.deserialize_with.as_ref()
             }
         }
+
         pub struct Field {
             name: Name,
             skip_serializing: bool,
@@ -1327,11 +1453,13 @@ mod internals {
             flatten: bool,
             transparent: bool,
         }
+
         pub enum Default {
             None,
             Default,
             Path(syn::ExprPath),
         }
+
         impl Default {
             pub fn is_none(&self) -> bool {
                 match self {
@@ -1340,6 +1468,7 @@ mod internals {
                 }
             }
         }
+
         impl Field {
             pub fn from_ast(
                 cx: &Ctxt,
@@ -1362,13 +1491,16 @@ mod internals {
                 let mut borrowed_lifetimes = Attr::none(cx, BORROW);
                 let mut getter = Attr::none(cx, GETTER);
                 let mut flatten = BoolAttr::none(cx, FLATTEN);
+
                 let ident = match &field.ident {
                     Some(ident) => unraw(ident),
                     None => index.to_string(),
                 };
+
                 let variant_borrow = attrs
                     .and_then(|variant| variant.borrow.as_ref())
                     .map(|borrow| Meta(borrow.clone()));
+
                 for meta_item in field
                     .attrs
                     .iter()
@@ -1387,6 +1519,7 @@ mod internals {
                         Meta(List(m)) if m.path == RENAME => {
                             if let Ok((ser, de)) = get_multiple_renames(cx, &m.nested) {
                                 ser_name.set_opt(&m.path, ser.map(syn::LitStr::value));
+
                                 for de_value in de {
                                     de_name.set_if_none(de_value.value());
                                     de_aliases.insert(&m.path, de_value.value());
@@ -1454,12 +1587,15 @@ mod internals {
                                 &m.lit,
                             ) {
                                 let mut ser_path = path.clone();
+
                                 ser_path
                                     .path
                                     .segments
                                     .push(Ident::new("serialize", Span::call_site()).into());
                                 serialize_with.set(&m.path, ser_path);
+
                                 let mut de_path = path;
+
                                 de_path
                                     .path
                                     .segments
@@ -1518,11 +1654,13 @@ mod internals {
                                                             ],
                                                         ),
                                                     );
+
                                                     res
                                                 },
                                             );
                                         }
                                     }
+
                                     borrowed_lifetimes.set(&m.path, lifetimes);
                                 }
                             }
@@ -1545,6 +1683,7 @@ mod internals {
                                 .into_token_stream()
                                 .to_string()
                                 .replace(' ', "");
+
                             cx.error_spanned_by(
                                 meta_item.path(),
                                 {
@@ -1554,6 +1693,7 @@ mod internals {
                                             &[::core::fmt::ArgumentV1::new_display(&path)],
                                         ),
                                     );
+
                                     res
                                 },
                             );
@@ -1566,51 +1706,63 @@ mod internals {
                         }
                     }
                 }
+
                 if let Default::None = *container_default {
                     if skip_deserializing.0.value.is_some() {
                         default.set_if_none(Default::Default);
                     }
                 }
+
                 let mut borrowed_lifetimes = borrowed_lifetimes
                     .get()
                     .unwrap_or_default();
+
                 if !borrowed_lifetimes.is_empty() {
                     if is_cow(&field.ty, is_str) {
                         let mut path = syn::Path {
                             leading_colon: None,
                             segments: Punctuated::new(),
                         };
+
                         let span = Span::call_site();
+
                         path.segments.push(Ident::new("_serde", span).into());
                         path.segments.push(Ident::new("__private", span).into());
                         path.segments.push(Ident::new("de", span).into());
                         path.segments.push(Ident::new("borrow_cow_str", span).into());
+
                         let expr = syn::ExprPath {
                             attrs: Vec::new(),
                             qself: None,
                             path,
                         };
+
                         deserialize_with.set_if_none(expr);
                     } else if is_cow(&field.ty, is_slice_u8) {
                         let mut path = syn::Path {
                             leading_colon: None,
                             segments: Punctuated::new(),
                         };
+
                         let span = Span::call_site();
+
                         path.segments.push(Ident::new("_serde", span).into());
                         path.segments.push(Ident::new("__private", span).into());
                         path.segments.push(Ident::new("de", span).into());
                         path.segments.push(Ident::new("borrow_cow_bytes", span).into());
+
                         let expr = syn::ExprPath {
                             attrs: Vec::new(),
                             qself: None,
                             path,
                         };
+
                         deserialize_with.set_if_none(expr);
                     }
                 } else if is_implicitly_borrowed(&field.ty) {
                     collect_lifetimes(&field.ty, &mut borrowed_lifetimes);
                 }
+
                 Field {
                     name: Name::from_attrs(ident, ser_name, de_name, Some(de_aliases)),
                     skip_serializing: skip_serializing.get(),
@@ -1627,65 +1779,84 @@ mod internals {
                     transparent: false,
                 }
             }
+
             pub fn name(&self) -> &Name {
                 &self.name
             }
+
             pub fn aliases(&self) -> Vec<String> {
                 self.name.deserialize_aliases()
             }
+
             pub fn rename_by_rules(&mut self, rules: &RenameAllRules) {
                 if !self.name.serialize_renamed {
                     self.name.serialize = rules
                         .serialize
                         .apply_to_field(&self.name.serialize);
                 }
+
                 if !self.name.deserialize_renamed {
                     self.name.deserialize = rules
                         .deserialize
                         .apply_to_field(&self.name.deserialize);
                 }
             }
+
             pub fn skip_serializing(&self) -> bool {
                 self.skip_serializing
             }
+
             pub fn skip_deserializing(&self) -> bool {
                 self.skip_deserializing
             }
+
             pub fn skip_serializing_if(&self) -> Option<&syn::ExprPath> {
                 self.skip_serializing_if.as_ref()
             }
+
             pub fn default(&self) -> &Default {
                 &self.default
             }
+
             pub fn serialize_with(&self) -> Option<&syn::ExprPath> {
                 self.serialize_with.as_ref()
             }
+
             pub fn deserialize_with(&self) -> Option<&syn::ExprPath> {
                 self.deserialize_with.as_ref()
             }
+
             pub fn ser_bound(&self) -> Option<&[syn::WherePredicate]> {
                 self.ser_bound.as_ref().map(|vec| &vec[..])
             }
+
             pub fn de_bound(&self) -> Option<&[syn::WherePredicate]> {
                 self.de_bound.as_ref().map(|vec| &vec[..])
             }
+
             pub fn borrowed_lifetimes(&self) -> &BTreeSet<syn::Lifetime> {
                 &self.borrowed_lifetimes
             }
+
             pub fn getter(&self) -> Option<&syn::ExprPath> {
                 self.getter.as_ref()
             }
+
             pub fn flatten(&self) -> bool {
                 self.flatten
             }
+
             pub fn transparent(&self) -> bool {
                 self.transparent
             }
+
             pub fn mark_transparent(&mut self) {
                 self.transparent = true;
             }
         }
+
         type SerAndDe<T> = (Option<T>, Option<T>);
+
         fn get_ser_and_de<'a, 'b, T, F>(
             cx: &'b Ctxt,
             attr_name: Symbol,
@@ -1698,6 +1869,7 @@ mod internals {
         {
             let mut ser_meta = VecAttr::none(cx, attr_name);
             let mut de_meta = VecAttr::none(cx, attr_name);
+
             for meta in metas {
                 match meta {
                     Meta(NameValue(meta)) if meta.path == SERIALIZE => {
@@ -1747,6 +1919,7 @@ mod internals {
                                         unsafe { ::core::fmt::UnsafeArg::new() },
                                     ),
                                 );
+
                                 res
                             },
                         );
@@ -1754,29 +1927,37 @@ mod internals {
                     }
                 }
             }
+
             Ok((ser_meta, de_meta))
         }
+
         fn get_renames<'a>(
             cx: &Ctxt,
             items: &'a Punctuated<syn::NestedMeta, ::syn::token::Comma>,
         ) -> Result<SerAndDe<&'a syn::LitStr>, ()> {
             let (ser, de) = get_ser_and_de(cx, RENAME, items, get_lit_str2)?;
+
             Ok((ser.at_most_one()?, de.at_most_one()?))
         }
+
         fn get_multiple_renames<'a>(
             cx: &Ctxt,
             items: &'a Punctuated<syn::NestedMeta, ::syn::token::Comma>,
         ) -> Result<(Option<&'a syn::LitStr>, Vec<&'a syn::LitStr>), ()> {
             let (ser, de) = get_ser_and_de(cx, RENAME, items, get_lit_str2)?;
+
             Ok((ser.at_most_one()?, de.get()))
         }
+
         fn get_where_predicates(
             cx: &Ctxt,
             items: &Punctuated<syn::NestedMeta, ::syn::token::Comma>,
         ) -> Result<SerAndDe<Vec<syn::WherePredicate>>, ()> {
             let (ser, de) = get_ser_and_de(cx, BOUND, items, parse_lit_into_where)?;
+
             Ok((ser.at_most_one()?, de.at_most_one()?))
         }
+
         pub fn get_serde_meta_items(
             cx: &Ctxt,
             attr: &syn::Attribute,
@@ -1784,6 +1965,7 @@ mod internals {
             if attr.path != SERDE {
                 return Ok(Vec::new());
             }
+
             match attr.parse_meta() {
                 Ok(List(meta)) => Ok(meta.nested.into_iter().collect()),
                 Ok(other) => {
@@ -1796,6 +1978,7 @@ mod internals {
                 }
             }
         }
+
         fn get_lit_str<'a>(
             cx: &Ctxt,
             attr_name: Symbol,
@@ -1803,6 +1986,7 @@ mod internals {
         ) -> Result<&'a syn::LitStr, ()> {
             get_lit_str2(cx, attr_name, attr_name, lit)
         }
+
         fn get_lit_str2<'a>(
             cx: &Ctxt,
             attr_name: Symbol,
@@ -1828,18 +2012,21 @@ mod internals {
                                 ],
                             ),
                         );
+
                         res
                     },
                 );
                 Err(())
             }
         }
+
         fn parse_lit_into_path(
             cx: &Ctxt,
             attr_name: Symbol,
             lit: &syn::Lit,
         ) -> Result<syn::Path, ()> {
             let string = get_lit_str(cx, attr_name, lit)?;
+
             parse_lit_str(string)
                 .map_err(|_| {
                     cx.error_spanned_by(
@@ -1851,17 +2038,20 @@ mod internals {
                                     &[::core::fmt::ArgumentV1::new_debug(&string.value())],
                                 ),
                             );
+
                             res
                         },
                     );
                 })
         }
+
         fn parse_lit_into_expr_path(
             cx: &Ctxt,
             attr_name: Symbol,
             lit: &syn::Lit,
         ) -> Result<syn::ExprPath, ()> {
             let string = get_lit_str(cx, attr_name, lit)?;
+
             parse_lit_str(string)
                 .map_err(|_| {
                     cx.error_spanned_by(
@@ -1873,11 +2063,13 @@ mod internals {
                                     &[::core::fmt::ArgumentV1::new_debug(&string.value())],
                                 ),
                             );
+
                             res
                         },
                     );
                 })
         }
+
         fn parse_lit_into_where(
             cx: &Ctxt,
             attr_name: Symbol,
@@ -1885,9 +2077,11 @@ mod internals {
             lit: &syn::Lit,
         ) -> Result<Vec<syn::WherePredicate>, ()> {
             let string = get_lit_str2(cx, attr_name, meta_item_name, lit)?;
+
             if string.value().is_empty() {
                 return Ok(Vec::new());
             }
+
             let where_string = syn::LitStr::new(
                 &{
                     let res = ::alloc::fmt::format(
@@ -1896,20 +2090,24 @@ mod internals {
                             &[::core::fmt::ArgumentV1::new_display(&string.value())],
                         ),
                     );
+
                     res
                 },
                 string.span(),
             );
+
             parse_lit_str::<syn::WhereClause>(&where_string)
                 .map(|wh| wh.predicates.into_iter().collect())
                 .map_err(|err| cx.error_spanned_by(lit, err))
         }
+
         fn parse_lit_into_ty(
             cx: &Ctxt,
             attr_name: Symbol,
             lit: &syn::Lit,
         ) -> Result<syn::Type, ()> {
             let string = get_lit_str(cx, attr_name, lit)?;
+
             parse_lit_str(string)
                 .map_err(|_| {
                     cx.error_spanned_by(
@@ -1924,29 +2122,36 @@ mod internals {
                                     ],
                                 ),
                             );
+
                             res
                         },
                     );
                 })
         }
+
         fn parse_lit_into_lifetimes(
             cx: &Ctxt,
             attr_name: Symbol,
             lit: &syn::Lit,
         ) -> Result<BTreeSet<syn::Lifetime>, ()> {
             let string = get_lit_str(cx, attr_name, lit)?;
+
             if string.value().is_empty() {
                 cx.error_spanned_by(lit, "at least one lifetime must be borrowed");
                 return Err(());
             }
+
             struct BorrowedLifetimes(Punctuated<syn::Lifetime, ::syn::token::Add>);
+
             impl Parse for BorrowedLifetimes {
                 fn parse(input: ParseStream) -> parse::Result<Self> {
                     Punctuated::parse_separated_nonempty(input).map(BorrowedLifetimes)
                 }
             }
+
             if let Ok(BorrowedLifetimes(lifetimes)) = parse_lit_str(string) {
                 let mut set = BTreeSet::new();
+
                 for lifetime in lifetimes {
                     if !set.insert(lifetime.clone()) {
                         cx.error_spanned_by(
@@ -1958,13 +2163,16 @@ mod internals {
                                         &[::core::fmt::ArgumentV1::new_display(&lifetime)],
                                     ),
                                 );
+
                                 res
                             },
                         );
                     }
                 }
+
                 return Ok(set);
             }
+
             cx.error_spanned_by(
                 lit,
                 {
@@ -1974,18 +2182,22 @@ mod internals {
                             &[::core::fmt::ArgumentV1::new_debug(&string.value())],
                         ),
                     );
+
                     res
                 },
             );
             Err(())
         }
+
         fn is_implicitly_borrowed(ty: &syn::Type) -> bool {
             is_implicitly_borrowed_reference(ty)
                 || is_option(ty, is_implicitly_borrowed_reference)
         }
+
         fn is_implicitly_borrowed_reference(ty: &syn::Type) -> bool {
             is_reference(ty, is_str) || is_reference(ty, is_slice_u8)
         }
+
         fn is_cow(ty: &syn::Type, elem: fn(&syn::Type) -> bool) -> bool {
             let path = match ungroup(ty) {
                 syn::Type::Path(ty) => &ty.path,
@@ -1993,18 +2205,21 @@ mod internals {
                     return false;
                 }
             };
+
             let seg = match path.segments.last() {
                 Some(seg) => seg,
                 None => {
                     return false;
                 }
             };
+
             let args = match &seg.arguments {
                 syn::PathArguments::AngleBracketed(bracketed) => &bracketed.args,
                 _ => {
                     return false;
                 }
             };
+
             seg.ident == "Cow" && args.len() == 2
                 && match (&args[0], &args[1]) {
                     (
@@ -2014,6 +2229,7 @@ mod internals {
                     _ => false,
                 }
         }
+
         fn is_option(ty: &syn::Type, elem: fn(&syn::Type) -> bool) -> bool {
             let path = match ungroup(ty) {
                 syn::Type::Path(ty) => &ty.path,
@@ -2021,39 +2237,46 @@ mod internals {
                     return false;
                 }
             };
+
             let seg = match path.segments.last() {
                 Some(seg) => seg,
                 None => {
                     return false;
                 }
             };
+
             let args = match &seg.arguments {
                 syn::PathArguments::AngleBracketed(bracketed) => &bracketed.args,
                 _ => {
                     return false;
                 }
             };
+
             seg.ident == "Option" && args.len() == 1
                 && match &args[0] {
                     syn::GenericArgument::Type(arg) => elem(arg),
                     _ => false,
                 }
         }
+
         fn is_reference(ty: &syn::Type, elem: fn(&syn::Type) -> bool) -> bool {
             match ungroup(ty) {
                 syn::Type::Reference(ty) => ty.mutability.is_none() && elem(&ty.elem),
                 _ => false,
             }
         }
+
         fn is_str(ty: &syn::Type) -> bool {
             is_primitive_type(ty, "str")
         }
+
         fn is_slice_u8(ty: &syn::Type) -> bool {
             match ungroup(ty) {
                 syn::Type::Slice(ty) => is_primitive_type(&ty.elem, "u8"),
                 _ => false,
             }
         }
+
         fn is_primitive_type(ty: &syn::Type, primitive: &str) -> bool {
             match ungroup(ty) {
                 syn::Type::Path(ty) => {
@@ -2062,18 +2285,22 @@ mod internals {
                 _ => false,
             }
         }
+
         fn is_primitive_path(path: &syn::Path, primitive: &str) -> bool {
             path.leading_colon.is_none() && path.segments.len() == 1
                 && path.segments[0].ident == primitive
                 && path.segments[0].arguments.is_empty()
         }
+
         fn borrowable_lifetimes(
             cx: &Ctxt,
             name: &str,
             field: &syn::Field,
         ) -> Result<BTreeSet<syn::Lifetime>, ()> {
             let mut lifetimes = BTreeSet::new();
+
             collect_lifetimes(&field.ty, &mut lifetimes);
+
             if lifetimes.is_empty() {
                 cx.error_spanned_by(
                     field,
@@ -2084,6 +2311,7 @@ mod internals {
                                 &[::core::fmt::ArgumentV1::new_display(&name)],
                             ),
                         );
+
                         res
                     },
                 );
@@ -2092,6 +2320,7 @@ mod internals {
                 Ok(lifetimes)
             }
         }
+
         fn collect_lifetimes(ty: &syn::Type, out: &mut BTreeSet<syn::Lifetime>) {
             match ty {
                 syn::Type::Slice(ty) => {
@@ -2116,6 +2345,7 @@ mod internals {
                     if let Some(qself) = &ty.qself {
                         collect_lifetimes(&qself.ty, out);
                     }
+
                     for seg in &ty.path.segments {
                         if let syn::PathArguments::AngleBracketed(bracketed) = &seg
                             .arguments
@@ -2156,11 +2386,13 @@ mod internals {
                 _ => {}
             }
         }
+
         fn collect_lifetimes_from_tokens(
             tokens: TokenStream,
             out: &mut BTreeSet<syn::Lifetime>,
         ) {
             let mut iter = tokens.into_iter();
+
             while let Some(tt) = iter.next() {
                 match &tt {
                     TokenTree::Punct(
@@ -2175,33 +2407,43 @@ mod internals {
                     }
                     TokenTree::Group(group) => {
                         let tokens = group.stream();
+
                         collect_lifetimes_from_tokens(tokens, out);
                     }
                     _ => {}
                 }
             }
         }
+
         fn parse_lit_str<T>(s: &syn::LitStr) -> parse::Result<T>
         where
             T: Parse,
         {
             let tokens = spanned_tokens(s)?;
+
             syn::parse2(tokens)
         }
+
         fn spanned_tokens(s: &syn::LitStr) -> parse::Result<TokenStream> {
             let stream = syn::parse_str(&s.value())?;
+
             Ok(respan(stream, s.span()))
         }
     }
+
     mod ctxt {
         use quote::ToTokens;
+
         use std::cell::RefCell;
         use std::fmt::Display;
         use std::thread;
+
         use syn;
+
         pub struct Ctxt {
             errors: RefCell<Option<Vec<syn::Error>>>,
         }
+
         #[automatically_derived]
         #[allow(unused_qualifications)]
         impl ::core::default::Default for Ctxt {
@@ -2212,12 +2454,14 @@ mod internals {
                 }
             }
         }
+
         impl Ctxt {
             pub fn new() -> Self {
                 Ctxt {
                     errors: RefCell::new(Some(Vec::new())),
                 }
             }
+
             pub fn error_spanned_by<A: ToTokens, T: Display>(&self, obj: A, msg: T) {
                 self.errors
                     .borrow_mut()
@@ -2225,17 +2469,21 @@ mod internals {
                     .unwrap()
                     .push(syn::Error::new_spanned(obj.into_token_stream(), msg));
             }
+
             pub fn syn_error(&self, err: syn::Error) {
                 self.errors.borrow_mut().as_mut().unwrap().push(err);
             }
+
             pub fn check(self) -> Result<(), Vec<syn::Error>> {
                 let errors = self.errors.borrow_mut().take().unwrap();
+
                 match errors.len() {
                     0 => Ok(()),
                     _ => Err(errors),
                 }
             }
         }
+
         impl Drop for Ctxt {
             fn drop(&mut self) {
                 if !thread::panicking() && self.errors.borrow().is_some() {
@@ -2244,49 +2492,65 @@ mod internals {
             }
         }
     }
+
     pub use self::ctxt::Ctxt;
+
     mod receiver {
         use internals::respan::respan;
         use proc_macro2::Span;
         use quote::ToTokens;
+
         use std::mem;
+
         use syn::punctuated::Punctuated;
         use syn::{
             parse_quote, Data, DeriveInput, Expr, ExprPath, GenericArgument,
             GenericParam, Generics, Macro, Path, PathArguments, QSelf, ReturnType, Type,
             TypeParamBound, TypePath, WherePredicate,
         };
+
         pub fn replace_receiver(input: &mut DeriveInput) {
             let self_ty = {
                 let ident = &input.ident;
                 let ty_generics = input.generics.split_for_impl().1;
+
                 ::syn::parse_quote::parse({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&ident, &mut _s);
                     ::quote::ToTokens::to_tokens(&ty_generics, &mut _s);
                     _s
                 })
             };
+
             let mut visitor = ReplaceReceiver(&self_ty);
+
             visitor.visit_generics_mut(&mut input.generics);
             visitor.visit_data_mut(&mut input.data);
         }
+
         struct ReplaceReceiver<'a>(&'a TypePath);
+
         impl ReplaceReceiver<'_> {
             fn self_ty(&self, span: Span) -> TypePath {
                 let tokens = self.0.to_token_stream();
                 let respanned = respan(tokens, span);
+
                 syn::parse2(respanned).unwrap()
             }
+
             fn self_to_qself(&self, qself: &mut Option<QSelf>, path: &mut Path) {
                 if path.leading_colon.is_some() || path.segments[0].ident != "Self" {
                     return;
                 }
+
                 if path.segments.len() == 1 {
                     self.self_to_expr_path(path);
                     return;
                 }
+
                 let span = path.segments[0].ident.span();
+
                 *qself = Some(QSelf {
                     lt_token: ::syn::token::Lt(span),
                     ty: Box::new(Type::Path(self.self_ty(span))),
@@ -2297,12 +2561,16 @@ mod internals {
                 path.leading_colon = Some(
                     **path.segments.pairs().next().unwrap().punct().unwrap(),
                 );
+
                 let segments = mem::replace(&mut path.segments, Punctuated::new());
+
                 path.segments = segments.into_pairs().skip(1).collect();
             }
+
             fn self_to_expr_path(&self, path: &mut Path) {
                 let self_ty = self.self_ty(path.segments[0].ident.span());
                 let variant = mem::replace(path, self_ty.path);
+
                 for segment in &mut path.segments {
                     if let PathArguments::AngleBracketed(bracketed) = &mut segment
                         .arguments
@@ -2315,12 +2583,14 @@ mod internals {
                         }
                     }
                 }
+
                 if variant.segments.len() > 1 {
                     path.segments.push_punct(<::syn::token::Colon2>::default());
                     path.segments.extend(variant.segments.into_pairs().skip(1));
                 }
             }
         }
+
         impl ReplaceReceiver<'_> {
             fn visit_type_mut(&mut self, ty: &mut Type) {
                 let span = if let Type::Path(node) = ty {
@@ -2334,20 +2604,26 @@ mod internals {
                     self.visit_type_mut_impl(ty);
                     return;
                 };
+
                 *ty = self.self_ty(span).into();
             }
+
             fn visit_type_path_mut(&mut self, ty: &mut TypePath) {
                 if ty.qself.is_none() {
                     self.self_to_qself(&mut ty.qself, &mut ty.path);
                 }
+
                 self.visit_type_path_mut_impl(ty);
             }
+
             fn visit_expr_path_mut(&mut self, expr: &mut ExprPath) {
                 if expr.qself.is_none() {
                     self.self_to_qself(&mut expr.qself, &mut expr.path);
                 }
+
                 self.visit_expr_path_mut_impl(expr);
             }
+
             fn visit_type_mut_impl(&mut self, ty: &mut Type) {
                 match ty {
                     Type::Array(ty) => {
@@ -2358,6 +2634,7 @@ mod internals {
                         for arg in &mut ty.inputs {
                             self.visit_type_mut(&mut arg.ty);
                         }
+
                         self.visit_return_type_mut(&mut ty.output);
                     }
                     Type::Group(ty) => self.visit_type_mut(&mut ty.elem),
@@ -2372,6 +2649,7 @@ mod internals {
                         if let Some(qself) = &mut ty.qself {
                             self.visit_type_mut(&mut qself.ty);
                         }
+
                         self.visit_path_mut(&mut ty.path);
                     }
                     Type::Ptr(ty) => self.visit_type_mut(&mut ty.elem),
@@ -2391,23 +2669,29 @@ mod internals {
                     _ => {}
                 }
             }
+
             fn visit_type_path_mut_impl(&mut self, ty: &mut TypePath) {
                 if let Some(qself) = &mut ty.qself {
                     self.visit_type_mut(&mut qself.ty);
                 }
+
                 self.visit_path_mut(&mut ty.path);
             }
+
             fn visit_expr_path_mut_impl(&mut self, expr: &mut ExprPath) {
                 if let Some(qself) = &mut expr.qself {
                     self.visit_type_mut(&mut qself.ty);
                 }
+
                 self.visit_path_mut(&mut expr.path);
             }
+
             fn visit_path_mut(&mut self, path: &mut Path) {
                 for segment in &mut path.segments {
                     self.visit_path_arguments_mut(&mut segment.arguments);
                 }
             }
+
             fn visit_path_arguments_mut(&mut self, arguments: &mut PathArguments) {
                 match arguments {
                     PathArguments::None => {}
@@ -2428,22 +2712,26 @@ mod internals {
                         for argument in &mut arguments.inputs {
                             self.visit_type_mut(argument);
                         }
+
                         self.visit_return_type_mut(&mut arguments.output);
                     }
                 }
             }
+
             fn visit_return_type_mut(&mut self, return_type: &mut ReturnType) {
                 match return_type {
                     ReturnType::Default => {}
                     ReturnType::Type(_, output) => self.visit_type_mut(output),
                 }
             }
+
             fn visit_type_param_bound_mut(&mut self, bound: &mut TypeParamBound) {
                 match bound {
                     TypeParamBound::Trait(bound) => self.visit_path_mut(&mut bound.path),
                     TypeParamBound::Lifetime(_) => {}
                 }
             }
+
             fn visit_generics_mut(&mut self, generics: &mut Generics) {
                 for param in &mut generics.params {
                     match param {
@@ -2455,11 +2743,13 @@ mod internals {
                         GenericParam::Lifetime(_) | GenericParam::Const(_) => {}
                     }
                 }
+
                 if let Some(where_clause) = &mut generics.where_clause {
                     for predicate in &mut where_clause.predicates {
                         match predicate {
                             WherePredicate::Type(predicate) => {
                                 self.visit_type_mut(&mut predicate.bounded_ty);
+
                                 for bound in &mut predicate.bounds {
                                     self.visit_type_param_bound_mut(bound);
                                 }
@@ -2469,6 +2759,7 @@ mod internals {
                     }
                 }
             }
+
             fn visit_data_mut(&mut self, data: &mut Data) {
                 match data {
                     Data::Struct(data) => {
@@ -2486,6 +2777,7 @@ mod internals {
                     Data::Union(_) => {}
                 }
             }
+
             fn visit_expr_mut(&mut self, expr: &mut Expr) {
                 match expr {
                     Expr::Binary(expr) => {
@@ -2494,6 +2786,7 @@ mod internals {
                     }
                     Expr::Call(expr) => {
                         self.visit_expr_mut(&mut expr.func);
+
                         for arg in &mut expr.args {
                             self.visit_expr_mut(arg);
                         }
@@ -2513,15 +2806,20 @@ mod internals {
                     _ => {}
                 }
             }
+
             fn visit_macro_mut(&mut self, _mac: &mut Macro) {}
         }
     }
+
     pub use self::receiver::replace_receiver;
+
     mod case {
         #[allow(deprecated, unused_imports)]
         use std::ascii::AsciiExt;
         use std::fmt::{self, Debug, Display};
+
         use self::RenameRule::*;
+
         pub enum RenameRule {
             None,
             LowerCase,
@@ -2533,9 +2831,11 @@ mod internals {
             KebabCase,
             ScreamingKebabCase,
         }
+
         #[automatically_derived]
         #[allow(unused_qualifications)]
         impl ::core::marker::Copy for RenameRule {}
+
         #[automatically_derived]
         #[allow(unused_qualifications)]
         impl ::core::clone::Clone for RenameRule {
@@ -2544,7 +2844,9 @@ mod internals {
                 { *self }
             }
         }
+
         impl ::core::marker::StructuralPartialEq for RenameRule {}
+
         #[automatically_derived]
         #[allow(unused_qualifications)]
         impl ::core::cmp::PartialEq for RenameRule {
@@ -2553,6 +2855,7 @@ mod internals {
                 {
                     let __self_vi = ::core::intrinsics::discriminant_value(&*self);
                     let __arg_1_vi = ::core::intrinsics::discriminant_value(&*other);
+
                     if true && __self_vi == __arg_1_vi {
                         match (&*self, &*other) {
                             _ => true,
@@ -2563,6 +2866,7 @@ mod internals {
                 }
             }
         }
+
         static RENAME_RULES: &[(&str, RenameRule)] = &[
             ("lowercase", LowerCase),
             ("UPPERCASE", UpperCase),
@@ -2573,6 +2877,7 @@ mod internals {
             ("kebab-case", KebabCase),
             ("SCREAMING-KEBAB-CASE", ScreamingKebabCase),
         ];
+
         impl RenameRule {
             pub fn from_str(rename_all_str: &str) -> Result<Self, ParseError> {
                 for (name, rule) in RENAME_RULES {
@@ -2580,10 +2885,12 @@ mod internals {
                         return Ok(*rule);
                     }
                 }
+
                 Err(ParseError {
                     unknown: rename_all_str,
                 })
             }
+
             pub fn apply_to_variant(&self, variant: &str) -> String {
                 match *self {
                     None | PascalCase => variant.to_owned(),
@@ -2592,12 +2899,15 @@ mod internals {
                     CamelCase => variant[..1].to_ascii_lowercase() + &variant[1..],
                     SnakeCase => {
                         let mut snake = String::new();
+
                         for (i, ch) in variant.char_indices() {
                             if i > 0 && ch.is_uppercase() {
                                 snake.push('_');
                             }
+
                             snake.push(ch.to_ascii_lowercase());
                         }
+
                         snake
                     }
                     ScreamingSnakeCase => {
@@ -2609,6 +2919,7 @@ mod internals {
                     }
                 }
             }
+
             pub fn apply_to_field(&self, field: &str) -> String {
                 match *self {
                     None | LowerCase | SnakeCase => field.to_owned(),
@@ -2616,6 +2927,7 @@ mod internals {
                     PascalCase => {
                         let mut pascal = String::new();
                         let mut capitalize = true;
+
                         for ch in field.chars() {
                             if ch == '_' {
                                 capitalize = true;
@@ -2626,10 +2938,12 @@ mod internals {
                                 pascal.push(ch);
                             }
                         }
+
                         pascal
                     }
                     CamelCase => {
                         let pascal = PascalCase.apply_to_field(field);
+
                         pascal[..1].to_ascii_lowercase() + &pascal[1..]
                     }
                     ScreamingSnakeCase => field.to_ascii_uppercase(),
@@ -2640,29 +2954,36 @@ mod internals {
                 }
             }
         }
+
         pub struct ParseError<'a> {
             unknown: &'a str,
         }
+
         impl<'a> Display for ParseError<'a> {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 f.write_str("unknown rename rule `rename_all = ")?;
                 Debug::fmt(self.unknown, f)?;
                 f.write_str("`, expected one of ")?;
+
                 for (i, (name, _rule)) in RENAME_RULES.iter().enumerate() {
                     if i > 0 {
                         f.write_str(", ")?;
                     }
+
                     Debug::fmt(name, f)?;
                 }
+
                 Ok(())
             }
         }
     }
+
     mod check {
         use internals::ast::{Container, Data, Field, Style};
         use internals::attr::{Identifier, TagType};
         use internals::{ungroup, Ctxt, Derive};
         use syn::{Member, Type};
+
         pub fn check(cx: &Ctxt, cont: &mut Container, derive: Derive) {
             check_getter(cx, cont);
             check_flatten(cx, cont);
@@ -2673,6 +2994,7 @@ mod internals {
             check_transparent(cx, cont, derive);
             check_from_and_try_from(cx, cont);
         }
+
         fn check_getter(cx: &Ctxt, cont: &Container) {
             match cont.data {
                 Data::Enum(_) => {
@@ -2693,6 +3015,7 @@ mod internals {
                 }
             }
         }
+
         fn check_flatten(cx: &Ctxt, cont: &Container) {
             match &cont.data {
                 Data::Enum(variants) => {
@@ -2709,10 +3032,12 @@ mod internals {
                 }
             }
         }
+
         fn check_flatten_field(cx: &Ctxt, style: Style, field: &Field) {
             if !field.attrs.flatten() {
                 return;
             }
+
             match style {
                 Style::Tuple => {
                     cx.error_spanned_by(
@@ -2729,6 +3054,7 @@ mod internals {
                 _ => {}
             }
         }
+
         fn check_identifier(cx: &Ctxt, cont: &Container) {
             let variants = match &cont.data {
                 Data::Enum(variants) => variants,
@@ -2736,6 +3062,7 @@ mod internals {
                     return;
                 }
             };
+
             for (i, variant) in variants.iter().enumerate() {
                 match (
                     variant.style,
@@ -2783,6 +3110,7 @@ mod internals {
                                             &[::core::fmt::ArgumentV1::new_display(&variant.ident)],
                                         ),
                                     );
+
                                     res
                                 },
                             );
@@ -2803,6 +3131,7 @@ mod internals {
                 }
             }
         }
+
         fn check_variant_skip_attrs(cx: &Ctxt, cont: &Container) {
             let variants = match &cont.data {
                 Data::Enum(variants) => variants,
@@ -2810,6 +3139,7 @@ mod internals {
                     return;
                 }
             };
+
             for variant in variants.iter() {
                 if variant.attrs.serialize_with().is_some() {
                     if variant.attrs.skip_serializing() {
@@ -2825,12 +3155,15 @@ mod internals {
                                         &[::core::fmt::ArgumentV1::new_display(&variant.ident)],
                                     ),
                                 );
+
                                 res
                             },
                         );
                     }
+
                     for field in &variant.fields {
                         let member = member_message(&field.member);
+
                         if field.attrs.skip_serializing() {
                             cx.error_spanned_by(
                                 variant.original,
@@ -2848,10 +3181,12 @@ mod internals {
                                             ],
                                         ),
                                     );
+
                                     res
                                 },
                             );
                         }
+
                         if field.attrs.skip_serializing_if().is_some() {
                             cx.error_spanned_by(
                                 variant.original,
@@ -2869,12 +3204,14 @@ mod internals {
                                             ],
                                         ),
                                     );
+
                                     res
                                 },
                             );
                         }
                     }
                 }
+
                 if variant.attrs.deserialize_with().is_some() {
                     if variant.attrs.skip_deserializing() {
                         cx.error_spanned_by(
@@ -2889,13 +3226,16 @@ mod internals {
                                         &[::core::fmt::ArgumentV1::new_display(&variant.ident)],
                                     ),
                                 );
+
                                 res
                             },
                         );
                     }
+
                     for field in &variant.fields {
                         if field.attrs.skip_deserializing() {
                             let member = member_message(&field.member);
+
                             cx.error_spanned_by(
                                 variant.original,
                                 {
@@ -2912,6 +3252,7 @@ mod internals {
                                             ],
                                         ),
                                     );
+
                                     res
                                 },
                             );
@@ -2920,15 +3261,18 @@ mod internals {
                 }
             }
         }
+
         fn check_internal_tag_field_name_conflict(cx: &Ctxt, cont: &Container) {
             let variants = match &cont.data {
                 Data::Enum(variants) => variants,
                 Data::Struct(_, _) => return,
             };
+
             let tag = match cont.attrs.tag() {
                 TagType::Internal { tag } => tag.as_str(),
                 TagType::External | TagType::Adjacent { .. } | TagType::None => return,
             };
+
             let diagnose_conflict = || {
                 cx.error_spanned_by(
                     cont.original,
@@ -2939,10 +3283,12 @@ mod internals {
                                 &[::core::fmt::ArgumentV1::new_display(&tag)],
                             ),
                         );
+
                         res
                     },
                 );
             };
+
             for variant in variants {
                 match variant.style {
                     Style::Struct => {
@@ -2951,10 +3297,12 @@ mod internals {
                             let check_de = !field.attrs.skip_deserializing();
                             let name = field.attrs.name();
                             let ser_name = name.serialize_name();
+
                             if check_ser && ser_name == tag {
                                 diagnose_conflict();
                                 return;
                             }
+
                             for de_name in field.attrs.aliases() {
                                 if check_de && de_name == tag {
                                     diagnose_conflict();
@@ -2967,11 +3315,13 @@ mod internals {
                 }
             }
         }
+
         fn check_adjacent_tag_conflict(cx: &Ctxt, cont: &Container) {
             let (type_tag, content_tag) = match cont.attrs.tag() {
                 TagType::Adjacent { tag, content } => (tag, content),
                 TagType::Internal { .. } | TagType::External | TagType::None => return,
             };
+
             if type_tag == content_tag {
                 cx.error_spanned_by(
                     cont.original,
@@ -2985,33 +3335,39 @@ mod internals {
                                 &[::core::fmt::ArgumentV1::new_display(&type_tag)],
                             ),
                         );
+
                         res
                     },
                 );
             }
         }
+
         fn check_transparent(cx: &Ctxt, cont: &mut Container, derive: Derive) {
             if !cont.attrs.transparent() {
                 return;
             }
+
             if cont.attrs.type_from().is_some() {
                 cx.error_spanned_by(
                     cont.original,
                     "#[serde(transparent)] is not allowed with #[serde(from = \"...\")]",
                 );
             }
+
             if cont.attrs.type_try_from().is_some() {
                 cx.error_spanned_by(
                     cont.original,
                     "#[serde(transparent)] is not allowed with #[serde(try_from = \"...\")]",
                 );
             }
+
             if cont.attrs.type_into().is_some() {
                 cx.error_spanned_by(
                     cont.original,
                     "#[serde(transparent)] is not allowed with #[serde(into = \"...\")]",
                 );
             }
+
             let fields = match &mut cont.data {
                 Data::Enum(_) => {
                     cx.error_spanned_by(
@@ -3029,7 +3385,9 @@ mod internals {
                 }
                 Data::Struct(_, fields) => fields,
             };
+
             let mut transparent_field = None;
+
             for field in fields {
                 if allow_transparent(field, derive) {
                     if transparent_field.is_some() {
@@ -3039,9 +3397,11 @@ mod internals {
                         );
                         return;
                     }
+
                     transparent_field = Some(field);
                 }
             }
+
             match transparent_field {
                 Some(transparent_field) => transparent_field.attrs.mark_transparent(),
                 None => {
@@ -3062,6 +3422,7 @@ mod internals {
                 }
             }
         }
+
         fn member_message(member: &Member) -> String {
             match member {
                 Member::Named(ident) => {
@@ -3071,6 +3432,7 @@ mod internals {
                             &[::core::fmt::ArgumentV1::new_display(&ident)],
                         ),
                     );
+
                     res
                 }
                 Member::Unnamed(i) => {
@@ -3080,10 +3442,12 @@ mod internals {
                             &[::core::fmt::ArgumentV1::new_display(&i.index)],
                         ),
                     );
+
                     res
                 }
             }
         }
+
         fn allow_transparent(field: &Field, derive: Derive) -> bool {
             if let Type::Path(ty) = ungroup(field.ty) {
                 if let Some(seg) = ty.path.segments.last() {
@@ -3092,6 +3456,7 @@ mod internals {
                     }
                 }
             }
+
             match derive {
                 Derive::Serialize => !field.attrs.skip_serializing(),
                 Derive::Deserialize => {
@@ -3099,6 +3464,7 @@ mod internals {
                 }
             }
         }
+
         fn check_from_and_try_from(cx: &Ctxt, cont: &mut Container) {
             if cont.attrs.type_from().is_some() && cont.attrs.type_try_from().is_some() {
                 cx.error_spanned_by(
@@ -3108,26 +3474,35 @@ mod internals {
             }
         }
     }
+
     mod respan {
         use proc_macro2::{Group, Span, TokenStream, TokenTree};
+
         pub(crate) fn respan(stream: TokenStream, span: Span) -> TokenStream {
             stream.into_iter().map(|token| respan_token(token, span)).collect()
         }
+
         fn respan_token(mut token: TokenTree, span: Span) -> TokenTree {
             if let TokenTree::Group(g) = &mut token {
                 *g = Group::new(g.delimiter(), respan(g.stream(), span));
             }
+
             token.set_span(span);
             token
         }
     }
+
     mod symbol {
         use std::fmt::{self, Display};
+
         use syn::{Ident, Path};
+
         pub struct Symbol(&'static str);
+
         #[automatically_derived]
         #[allow(unused_qualifications)]
         impl ::core::marker::Copy for Symbol {}
+
         #[automatically_derived]
         #[allow(unused_qualifications)]
         impl ::core::clone::Clone for Symbol {
@@ -3135,10 +3510,12 @@ mod internals {
             fn clone(&self) -> Symbol {
                 {
                     let _: ::core::clone::AssertParamIsClone<&'static str>;
+
                     *self
                 }
             }
         }
+
         pub const ALIAS: Symbol = Symbol("alias");
         pub const BORROW: Symbol = Symbol("borrow");
         pub const BOUND: Symbol = Symbol("bound");
@@ -3171,40 +3548,49 @@ mod internals {
         pub const VARIANT_IDENTIFIER: Symbol = Symbol("variant_identifier");
         pub const WITH: Symbol = Symbol("with");
         pub const EXPECTING: Symbol = Symbol("expecting");
+
         impl PartialEq<Symbol> for Ident {
             fn eq(&self, word: &Symbol) -> bool {
                 self == word.0
             }
         }
+
         impl<'a> PartialEq<Symbol> for &'a Ident {
             fn eq(&self, word: &Symbol) -> bool {
                 *self == word.0
             }
         }
+
         impl PartialEq<Symbol> for Path {
             fn eq(&self, word: &Symbol) -> bool {
                 self.is_ident(word.0)
             }
         }
+
         impl<'a> PartialEq<Symbol> for &'a Path {
             fn eq(&self, word: &Symbol) -> bool {
                 self.is_ident(word.0)
             }
         }
+
         impl Display for Symbol {
             fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str(self.0)
             }
         }
     }
+
     use syn::Type;
+
     pub enum Derive {
         Serialize,
         Deserialize,
     }
+
     #[automatically_derived]
     #[allow(unused_qualifications)]
     impl ::core::marker::Copy for Derive {}
+
     #[automatically_derived]
     #[allow(unused_qualifications)]
     impl ::core::clone::Clone for Derive {
@@ -3213,23 +3599,29 @@ mod internals {
             { *self }
         }
     }
+
     pub fn ungroup(mut ty: &Type) -> &Type {
         while let Type::Group(group) = ty {
             ty = &group.elem;
         }
+
         ty
     }
 }
+
 use proc_macro::TokenStream;
 use syn::DeriveInput;
+
 #[macro_use]
 mod bound {
     use std::collections::HashSet;
+
     use syn;
     use syn::punctuated::{Pair, Punctuated};
     use internals::ast::{Container, Data};
     use internals::{attr, ungroup};
     use proc_macro2::Span;
+
     pub fn without_defaults(generics: &syn::Generics) -> syn::Generics {
         syn::Generics {
             params: generics
@@ -3249,14 +3641,17 @@ mod bound {
             ..generics.clone()
         }
     }
+
     pub fn with_where_predicates(
         generics: &syn::Generics,
         predicates: &[syn::WherePredicate],
     ) -> syn::Generics {
         let mut generics = generics.clone();
+
         generics.make_where_clause().predicates.extend(predicates.iter().cloned());
         generics
     }
+
     pub fn with_where_predicates_from_fields(
         cont: &Container,
         generics: &syn::Generics,
@@ -3267,10 +3662,13 @@ mod bound {
             .all_fields()
             .filter_map(|field| from_field(&field.attrs))
             .flat_map(<[syn::WherePredicate]>::to_vec);
+
         let mut generics = generics.clone();
+
         generics.make_where_clause().predicates.extend(predicates);
         generics
     }
+
     pub fn with_where_predicates_from_variants(
         cont: &Container,
         generics: &syn::Generics,
@@ -3282,14 +3680,18 @@ mod bound {
                 return generics.clone();
             }
         };
+
         let predicates = variants
             .iter()
             .filter_map(|variant| from_variant(&variant.attrs))
             .flat_map(<[syn::WherePredicate]>::to_vec);
+
         let mut generics = generics.clone();
+
         generics.make_where_clause().predicates.extend(predicates);
         generics
     }
+
     pub fn with_bound(
         cont: &Container,
         generics: &syn::Generics,
@@ -3301,6 +3703,7 @@ mod bound {
             relevant_type_params: HashSet<syn::Ident>,
             associated_type_usage: Vec<&'ast syn::TypePath>,
         }
+
         impl<'ast> FindTyParams<'ast> {
             fn visit_field(&mut self, field: &'ast syn::Field) {
                 if let syn::Type::Path(ty) = ungroup(&field.ty) {
@@ -3311,24 +3714,30 @@ mod bound {
                         }
                     }
                 }
+
                 self.visit_type(&field.ty);
             }
+
             fn visit_path(&mut self, path: &'ast syn::Path) {
                 if let Some(seg) = path.segments.last() {
                     if seg.ident == "PhantomData" {
                         return;
                     }
                 }
+
                 if path.leading_colon.is_none() && path.segments.len() == 1 {
                     let id = &path.segments[0].ident;
+
                     if self.all_type_params.contains(id) {
                         self.relevant_type_params.insert(id.clone());
                     }
                 }
+
                 for segment in &path.segments {
                     self.visit_path_segment(segment);
                 }
             }
+
             fn visit_type(&mut self, ty: &'ast syn::Type) {
                 match ty {
                     syn::Type::Array(ty) => self.visit_type(&ty.elem),
@@ -3336,6 +3745,7 @@ mod bound {
                         for arg in &ty.inputs {
                             self.visit_type(&arg.ty);
                         }
+
                         self.visit_return_type(&ty.output);
                     }
                     syn::Type::Group(ty) => self.visit_type(&ty.elem),
@@ -3350,6 +3760,7 @@ mod bound {
                         if let Some(qself) = &ty.qself {
                             self.visit_type(&qself.ty);
                         }
+
                         self.visit_path(&ty.path);
                     }
                     syn::Type::Ptr(ty) => self.visit_type(&ty.elem),
@@ -3371,9 +3782,11 @@ mod bound {
                     _ => {}
                 }
             }
+
             fn visit_path_segment(&mut self, segment: &'ast syn::PathSegment) {
                 self.visit_path_arguments(&segment.arguments);
             }
+
             fn visit_path_arguments(&mut self, arguments: &'ast syn::PathArguments) {
                 match arguments {
                     syn::PathArguments::None => {}
@@ -3394,33 +3807,40 @@ mod bound {
                         for argument in &arguments.inputs {
                             self.visit_type(argument);
                         }
+
                         self.visit_return_type(&arguments.output);
                     }
                 }
             }
+
             fn visit_return_type(&mut self, return_type: &'ast syn::ReturnType) {
                 match return_type {
                     syn::ReturnType::Default => {}
                     syn::ReturnType::Type(_, output) => self.visit_type(output),
                 }
             }
+
             fn visit_type_param_bound(&mut self, bound: &'ast syn::TypeParamBound) {
                 match bound {
                     syn::TypeParamBound::Trait(bound) => self.visit_path(&bound.path),
                     syn::TypeParamBound::Lifetime(_) => {}
                 }
             }
+
             fn visit_macro(&mut self, _mac: &'ast syn::Macro) {}
         }
+
         let all_type_params = generics
             .type_params()
             .map(|param| param.ident.clone())
             .collect();
+
         let mut visitor = FindTyParams {
             all_type_params,
             relevant_type_params: HashSet::new(),
             associated_type_usage: Vec::new(),
         };
+
         match &cont.data {
             Data::Enum(variants) => {
                 for variant in variants.iter() {
@@ -3428,6 +3848,7 @@ mod bound {
                         .fields
                         .iter()
                         .filter(|field| filter(&field.attrs, Some(&variant.attrs)));
+
                     for field in relevant_fields {
                         visitor.visit_field(field.original);
                     }
@@ -3439,6 +3860,7 @@ mod bound {
                 }
             }
         }
+
         let relevant_type_params = visitor.relevant_type_params;
         let associated_type_usage = visitor.associated_type_usage;
         let new_predicates = generics
@@ -3470,16 +3892,20 @@ mod bound {
                         .collect(),
                 })
             });
+
         let mut generics = generics.clone();
+
         generics.make_where_clause().predicates.extend(new_predicates);
         generics
     }
+
     pub fn with_self_bound(
         cont: &Container,
         generics: &syn::Generics,
         bound: &syn::Path,
     ) -> syn::Generics {
         let mut generics = generics.clone();
+
         generics
             .make_where_clause()
             .predicates
@@ -3505,6 +3931,7 @@ mod bound {
             );
         generics
     }
+
     pub fn with_lifetime_bound(
         generics: &syn::Generics,
         lifetime: &str,
@@ -3535,15 +3962,18 @@ mod bound {
                             }
                             syn::GenericParam::Const(_) => {}
                         }
+
                         param
                     }),
             )
             .collect();
+
         syn::Generics {
             params,
             ..generics.clone()
         }
     }
+
     fn type_of_item(cont: &Container) -> syn::Type {
         syn::Type::Path(syn::TypePath {
             qself: None,
@@ -3593,16 +4023,20 @@ mod bound {
         })
     }
 }
+
 #[macro_use]
 mod fragment {
     use proc_macro2::TokenStream;
     use quote::ToTokens;
     use syn::token;
+
     pub enum Fragment {
         Expr(TokenStream),
         Block(TokenStream),
     }
+
     pub struct Expr(pub Fragment);
+
     impl ToTokens for Expr {
         fn to_tokens(&self, out: &mut TokenStream) {
             match &self.0 {
@@ -3613,7 +4047,9 @@ mod fragment {
             }
         }
     }
+
     pub struct Stmts(pub Fragment);
+
     impl ToTokens for Stmts {
         fn to_tokens(&self, out: &mut TokenStream) {
             match &self.0 {
@@ -3622,7 +4058,9 @@ mod fragment {
             }
         }
     }
+
     pub struct Match(pub Fragment);
+
     impl ToTokens for Match {
         fn to_tokens(&self, out: &mut TokenStream) {
             match &self.0 {
@@ -3636,6 +4074,7 @@ mod fragment {
             }
         }
     }
+
     impl AsRef<TokenStream> for Fragment {
         fn as_ref(&self) -> &TokenStream {
             match self {
@@ -3645,6 +4084,7 @@ mod fragment {
         }
     }
 }
+
 mod de {
     use proc_macro2::{Literal, Span, TokenStream};
     use quote::ToTokens;
@@ -3657,19 +4097,25 @@ mod de {
     use internals::ast::{Container, Data, Field, Style, Variant};
     use internals::{attr, replace_receiver, ungroup, Ctxt, Derive};
     use pretend;
+
     use std::collections::BTreeSet;
     use std::ptr;
+
     pub fn expand_derive_deserialize(
         input: &mut syn::DeriveInput,
     ) -> Result<TokenStream, Vec<syn::Error>> {
         replace_receiver(input);
+
         let ctxt = Ctxt::new();
+
         let cont = match Container::from_ast(&ctxt, input, Derive::Deserialize) {
             Some(cont) => cont,
             None => return Err(ctxt.check().unwrap_err()),
         };
+
         precondition(&ctxt, &cont);
         ctxt.check()?;
+
         let ident = &cont.ident;
         let params = Parameters::new(&cont);
         let (de_impl_generics, _, ty_generics, where_clause) = split_with_de_lifetime(
@@ -3678,11 +4124,14 @@ mod de {
         let body = Stmts(deserialize_body(&cont, &params));
         let delife = params.borrowed.de_lifetime();
         let serde = cont.attrs.serde_path();
+
         let impl_block = if let Some(remote) = cont.attrs.remote() {
             let vis = &input.vis;
             let used = pretend::pretend_used(&cont, params.is_packed);
+
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "impl");
                 ::quote::ToTokens::to_tokens(&de_impl_generics, &mut _s);
                 ::quote::ToTokens::to_tokens(&ident, &mut _s);
@@ -3693,6 +4142,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&vis, &mut _s);
                         ::quote::__private::push_ident(&mut _s, "fn");
                         ::quote::__private::push_ident(&mut _s, "deserialize");
@@ -3704,6 +4154,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__deserializer");
                                 ::quote::__private::push_colon(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__D");
@@ -3739,6 +4190,7 @@ mod de {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&used, &mut _s);
                                 ::quote::ToTokens::to_tokens(&body, &mut _s);
                                 _s
@@ -3751,14 +4203,17 @@ mod de {
             }
         } else {
             let fn_deserialize_in_place = deserialize_in_place_body(&cont, &params);
+
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_pound(&mut _s);
                 ::quote::__private::push_group(
                     &mut _s,
                     ::quote::__private::Delimiter::Bracket,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "automatically_derived");
                         _s
                     },
@@ -3780,6 +4235,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "fn");
                         ::quote::__private::push_ident(&mut _s, "deserialize");
                         ::quote::__private::push_lt(&mut _s);
@@ -3790,6 +4246,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__deserializer");
                                 ::quote::__private::push_colon(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__D");
@@ -3824,6 +4281,7 @@ mod de {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&body, &mut _s);
                                 _s
                             },
@@ -3835,6 +4293,7 @@ mod de {
                 _s
             }
         };
+
         Ok(
             dummy::wrap_in_const(
                 cont.attrs.custom_serde_path(),
@@ -3844,10 +4303,12 @@ mod de {
             ),
         )
     }
+
     fn precondition(cx: &Ctxt, cont: &Container) {
         precondition_sized(cx, cont);
         precondition_no_de_lifetime(cx, cont);
     }
+
     fn precondition_sized(cx: &Ctxt, cont: &Container) {
         if let Data::Struct(_, fields) = &cont.data {
             if let Some(last) = fields.last() {
@@ -3860,6 +4321,7 @@ mod de {
             }
         }
     }
+
     fn precondition_no_de_lifetime(cx: &Ctxt, cont: &Container) {
         if let BorrowedLifetimes::Borrowed(_) = borrowed_lifetimes(cont) {
             for param in cont.generics.lifetimes() {
@@ -3873,6 +4335,7 @@ mod de {
             }
         }
     }
+
     struct Parameters {
         local: syn::Ident,
         this: syn::Path,
@@ -3881,17 +4344,21 @@ mod de {
         has_getter: bool,
         is_packed: bool,
     }
+
     impl Parameters {
         fn new(cont: &Container) -> Self {
             let local = cont.ident.clone();
+
             let this = match cont.attrs.remote() {
                 Some(remote) => remote.clone(),
                 None => cont.ident.clone().into(),
             };
+
             let borrowed = borrowed_lifetimes(cont);
             let generics = build_generics(cont, &borrowed);
             let has_getter = cont.data.has_getter();
             let is_packed = cont.attrs.is_packed();
+
             Parameters {
                 local,
                 this,
@@ -3901,10 +4368,12 @@ mod de {
                 is_packed,
             }
         }
+
         fn type_name(&self) -> String {
             self.this.segments.last().unwrap().ident.to_string()
         }
     }
+
     fn build_generics(cont: &Container, borrowed: &BorrowedLifetimes) -> syn::Generics {
         let generics = bound::without_defaults(cont.generics);
         let generics = bound::with_where_predicates_from_fields(
@@ -3917,6 +4386,7 @@ mod de {
             &generics,
             attr::Variant::de_bound,
         );
+
         match cont.attrs.de_bound() {
             Some(predicates) => bound::with_where_predicates(&generics, predicates),
             None => {
@@ -3927,6 +4397,7 @@ mod de {
                             &generics,
                             &::syn::parse_quote::parse({
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "_serde");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -3938,6 +4409,7 @@ mod de {
                     }
                     attr::Default::None | attr::Default::Path(_) => generics,
                 };
+
                 let delife = borrowed.de_lifetime();
                 let generics = bound::with_bound(
                     cont,
@@ -3945,6 +4417,7 @@ mod de {
                     needs_deserialize_bound,
                     &::syn::parse_quote::parse({
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "Deserialize");
@@ -3954,12 +4427,14 @@ mod de {
                         _s
                     }),
                 );
+
                 bound::with_bound(
                     cont,
                     &generics,
                     requires_default,
                     &::syn::parse_quote::parse({
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -3971,6 +4446,7 @@ mod de {
             }
         }
     }
+
     fn needs_deserialize_bound(
         field: &attr::Field,
         variant: Option<&attr::Variant>,
@@ -3987,13 +4463,16 @@ mod de {
                     },
                 )
     }
+
     fn requires_default(field: &attr::Field, _variant: Option<&attr::Variant>) -> bool {
         if let attr::Default::Default = *field.default() { true } else { false }
     }
+
     enum BorrowedLifetimes {
         Borrowed(BTreeSet<syn::Lifetime>),
         Static,
     }
+
     impl BorrowedLifetimes {
         fn de_lifetime(&self) -> syn::Lifetime {
             match *self {
@@ -4005,6 +4484,7 @@ mod de {
                 }
             }
         }
+
         fn de_lifetime_def(&self) -> Option<syn::LifetimeDef> {
             match self {
                 BorrowedLifetimes::Borrowed(bounds) => {
@@ -4019,19 +4499,23 @@ mod de {
             }
         }
     }
+
     fn borrowed_lifetimes(cont: &Container) -> BorrowedLifetimes {
         let mut lifetimes = BTreeSet::new();
+
         for field in cont.data.all_fields() {
             if !field.attrs.skip_deserializing() {
                 lifetimes.extend(field.attrs.borrowed_lifetimes().iter().cloned());
             }
         }
+
         if lifetimes.iter().any(|b| b.to_string() == "'static") {
             BorrowedLifetimes::Static
         } else {
             BorrowedLifetimes::Borrowed(lifetimes)
         }
     }
+
     fn deserialize_body(cont: &Container, params: &Parameters) -> Fragment {
         if cont.attrs.transparent() {
             deserialize_transparent(cont, params)
@@ -4073,6 +4557,7 @@ mod de {
             }
         }
     }
+
     #[cfg(not(feature = "deserialize_in_place"))]
     fn deserialize_in_place_body(
         _cont: &Container,
@@ -4080,6 +4565,7 @@ mod de {
     ) -> Option<Stmts> {
         None
     }
+
     fn deserialize_transparent(cont: &Container, params: &Parameters) -> Fragment {
         let fields = match &cont.data {
             Data::Struct(_, fields) => fields,
@@ -4087,19 +4573,25 @@ mod de {
                 ::core::panicking::panic("internal error: entered unreachable code")
             }
         };
+
         let this = &params.this;
         let transparent_field = fields.iter().find(|f| f.attrs.transparent()).unwrap();
+
         let path = match transparent_field.attrs.deserialize_with() {
             Some(path) => {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::ToTokens::to_tokens(&path, &mut _s);
                 _s
             }
             None => {
                 let span = transparent_field.original.span();
+
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     let _span: ::quote::__private::Span = span;
+
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
                     ::quote::__private::push_colon2_spanned(&mut _s, _span);
                     ::quote::__private::push_ident_spanned(
@@ -4117,13 +4609,16 @@ mod de {
                 }
             }
         };
+
         let assign = fields
             .iter()
             .map(|field| {
                 let member = &field.member;
+
                 if ptr::eq(field, transparent_field) {
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&member, &mut _s);
                         ::quote::__private::push_colon(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__transparent");
@@ -4133,6 +4628,7 @@ mod de {
                     let value = match field.attrs.default() {
                         attr::Default::Default => {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -4149,6 +4645,7 @@ mod de {
                         }
                         attr::Default::Path(path) => {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&path, &mut _s);
                             ::quote::__private::push_group(
                                 &mut _s,
@@ -4159,6 +4656,7 @@ mod de {
                         }
                         attr::Default::None => {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -4167,8 +4665,10 @@ mod de {
                             _s
                         }
                     };
+
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&member, &mut _s);
                         ::quote::__private::push_colon(&mut _s);
                         ::quote::ToTokens::to_tokens(&value, &mut _s);
@@ -4176,8 +4676,10 @@ mod de {
                     }
                 }
             });
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "_serde");
             ::quote::__private::push_colon2(&mut _s);
             ::quote::__private::push_ident(&mut _s, "__private");
@@ -4190,12 +4692,14 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&path, &mut _s);
                     ::quote::__private::push_group(
                         &mut _s,
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__deserializer");
                             _s
                         },
@@ -4210,26 +4714,35 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             {
                                 use ::quote::__private::ext::*;
+
                                 let mut _i = 0usize;
+
                                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                 #[allow(unused_mut)]
                                 let (mut assign, i) = assign.quote_into_iter();
+
                                 let has_iter = has_iter | i;
                                 let _: ::quote::__private::HasIterator = has_iter;
+
                                 while true {
                                     let assign = match assign.next() {
                                         Some(_x) => ::quote::__private::RepInterp(_x),
                                         None => break,
                                     };
+
                                     if _i > 0 {
                                         ::quote::__private::push_comma(&mut _s);
                                     }
+
                                     _i += 1;
                                     ::quote::ToTokens::to_tokens(&assign, &mut _s);
                                 }
                             };
+
                             _s
                         },
                     );
@@ -4239,9 +4752,11 @@ mod de {
             _s
         })
     }
+
     fn deserialize_from(type_from: &syn::Type) -> Fragment {
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "_serde");
             ::quote::__private::push_colon2(&mut _s);
             ::quote::__private::push_ident(&mut _s, "__private");
@@ -4254,6 +4769,7 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_lt(&mut _s);
                     ::quote::ToTokens::to_tokens(&type_from, &mut _s);
                     ::quote::__private::push_ident(&mut _s, "as");
@@ -4268,6 +4784,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__deserializer");
                             _s
                         },
@@ -4286,9 +4803,11 @@ mod de {
             _s
         })
     }
+
     fn deserialize_try_from(type_try_from: &syn::Type) -> Fragment {
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "_serde");
             ::quote::__private::push_colon2(&mut _s);
             ::quote::__private::push_ident(&mut _s, "__private");
@@ -4301,6 +4820,7 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_lt(&mut _s);
                     ::quote::ToTokens::to_tokens(&type_try_from, &mut _s);
                     ::quote::__private::push_ident(&mut _s, "as");
@@ -4315,6 +4835,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__deserializer");
                             _s
                         },
@@ -4335,6 +4856,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "v");
                             _s
                         },
@@ -4346,6 +4868,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "de");
@@ -4362,12 +4885,14 @@ mod de {
             _s
         })
     }
+
     fn deserialize_unit_struct(
         params: &Parameters,
         cattrs: &attr::Container,
     ) -> Fragment {
         let this = &params.this;
         let type_name = cattrs.name().deserialize_name();
+
         let expecting = {
             let res = ::alloc::fmt::format(
                 ::core::fmt::Arguments::new_v1(
@@ -4375,11 +4900,15 @@ mod de {
                     &[::core::fmt::ArgumentV1::new_display(&params.type_name())],
                 ),
             );
+
             res
         };
+
         let expecting = cattrs.expecting().unwrap_or(&expecting);
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "struct");
             ::quote::__private::push_ident(&mut _s, "__Visitor");
             ::quote::__private::push_semi(&mut _s);
@@ -4402,6 +4931,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "type");
                     ::quote::__private::push_ident(&mut _s, "Value");
                     ::quote::__private::push_eq(&mut _s);
@@ -4414,6 +4944,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_and(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "self");
                             ::quote::__private::push_comma(&mut _s);
@@ -4442,6 +4973,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -4454,6 +4986,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__formatter");
                                     ::quote::__private::push_comma(&mut _s);
                                     ::quote::ToTokens::to_tokens(&expecting, &mut _s);
@@ -4469,6 +5002,7 @@ mod de {
                         ::quote::__private::Delimiter::Bracket,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "inline");
                             _s
                         },
@@ -4483,6 +5017,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "self");
                             _s
                         },
@@ -4514,6 +5049,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -4524,6 +5060,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&this, &mut _s);
                                     _s
                                 },
@@ -4544,6 +5081,7 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__deserializer");
                     ::quote::__private::push_comma(&mut _s);
                     ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -4555,6 +5093,7 @@ mod de {
             _s
         })
     }
+
     fn deserialize_tuple(
         variant_ident: Option<&syn::Ident>,
         params: &Parameters,
@@ -4567,27 +5106,35 @@ mod de {
             params,
         );
         let delife = params.borrowed.de_lifetime();
+
         if !!cattrs.has_flatten() {
             ::core::panicking::panic("assertion failed: !cattrs.has_flatten()")
         }
+
         let construct = if params.has_getter {
             let local = &params.local;
+
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::ToTokens::to_tokens(&local, &mut _s);
                 _s
             }
         } else {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::ToTokens::to_tokens(&this, &mut _s);
                 _s
             }
         };
+
         let is_enum = variant_ident.is_some();
+
         let type_path = match variant_ident {
             Some(variant_ident) => {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::ToTokens::to_tokens(&construct, &mut _s);
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::ToTokens::to_tokens(&variant_ident, &mut _s);
@@ -4595,6 +5142,7 @@ mod de {
             }
             None => construct,
         };
+
         let expecting = match variant_ident {
             Some(variant_ident) => {
                 let res = ::alloc::fmt::format(
@@ -4606,6 +5154,7 @@ mod de {
                         ],
                     ),
                 );
+
                 res
             }
             None => {
@@ -4615,27 +5164,34 @@ mod de {
                         &[::core::fmt::ArgumentV1::new_display(&params.type_name())],
                     ),
                 );
+
                 res
             }
         };
+
         let expecting = cattrs.expecting().unwrap_or(&expecting);
         let nfields = fields.len();
+
         let visit_newtype_struct = if !is_enum && nfields == 1 {
             Some(deserialize_newtype_struct(&type_path, params, &fields[0]))
         } else {
             None
         };
+
         let visit_seq = Stmts(
             deserialize_seq(&type_path, params, fields, false, cattrs, expecting),
         );
+
         let visitor_expr = {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "__Visitor");
             ::quote::__private::push_group(
                 &mut _s,
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "marker");
                     ::quote::__private::push_colon(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "_serde");
@@ -4662,9 +5218,11 @@ mod de {
             );
             _s
         };
+
         let dispatch = if let Some(deserializer) = deserializer {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "Deserializer");
@@ -4675,6 +5233,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&deserializer, &mut _s);
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::ToTokens::to_tokens(&nfields, &mut _s);
@@ -4688,6 +5247,7 @@ mod de {
         } else if is_enum {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "de");
@@ -4700,6 +5260,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "__variant");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::ToTokens::to_tokens(&nfields, &mut _s);
@@ -4712,8 +5273,10 @@ mod de {
             }
         } else if nfields == 1 {
             let type_name = cattrs.name().deserialize_name();
+
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "Deserializer");
@@ -4724,6 +5287,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "__deserializer");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -4736,8 +5300,10 @@ mod de {
             }
         } else {
             let type_name = cattrs.name().deserialize_name();
+
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "Deserializer");
@@ -4748,6 +5314,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "__deserializer");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -4761,23 +5328,29 @@ mod de {
                 _s
             }
         };
+
         let all_skipped = fields.iter().all(|field| field.attrs.skip_deserializing());
+
         let visitor_var = if all_skipped {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_underscore(&mut _s);
                 _s
             }
         } else {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "mut");
                 ::quote::__private::push_ident(&mut _s, "__seq");
                 _s
             }
         };
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "struct");
             ::quote::__private::push_ident(&mut _s, "__Visitor");
             ::quote::ToTokens::to_tokens(&de_impl_generics, &mut _s);
@@ -4787,6 +5360,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "marker");
                     ::quote::__private::push_colon(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "_serde");
@@ -4838,6 +5412,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "type");
                     ::quote::__private::push_ident(&mut _s, "Value");
                     ::quote::__private::push_eq(&mut _s);
@@ -4851,6 +5426,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_and(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "self");
                             ::quote::__private::push_comma(&mut _s);
@@ -4879,6 +5455,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -4891,6 +5468,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__formatter");
                                     ::quote::__private::push_comma(&mut _s);
                                     ::quote::ToTokens::to_tokens(&expecting, &mut _s);
@@ -4907,6 +5485,7 @@ mod de {
                         ::quote::__private::Delimiter::Bracket,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "inline");
                             _s
                         },
@@ -4921,6 +5500,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "self");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::ToTokens::to_tokens(&visitor_var, &mut _s);
@@ -4961,6 +5541,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&visit_seq, &mut _s);
                             _s
                         },
@@ -4972,6 +5553,7 @@ mod de {
             _s
         })
     }
+
     fn deserialize_seq(
         type_path: &TokenStream,
         params: &Parameters,
@@ -4985,6 +5567,7 @@ mod de {
             .iter()
             .filter(|field| !field.attrs.skip_deserializing())
             .count();
+
         let expecting = if deserialized_count == 1 {
             {
                 let res = ::alloc::fmt::format(
@@ -4993,6 +5576,7 @@ mod de {
                         &[::core::fmt::ArgumentV1::new_display(&expecting)],
                     ),
                 );
+
                 res
             }
         } else {
@@ -5006,19 +5590,25 @@ mod de {
                         ],
                     ),
                 );
+
                 res
             }
         };
+
         let expecting = cattrs.expecting().unwrap_or(&expecting);
+
         let mut index_in_seq = 0_usize;
+
         let let_values = vars
             .clone()
             .zip(fields)
             .map(|(var, field)| {
                 if field.attrs.skip_deserializing() {
                     let default = Expr(expr_is_missing(field, cattrs));
+
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "let");
                         ::quote::ToTokens::to_tokens(&var, &mut _s);
                         ::quote::__private::push_eq(&mut _s);
@@ -5031,9 +5621,12 @@ mod de {
                         None => {
                             let field_ty = field.ty;
                             let span = field.original.span();
+
                             let func = {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 let _span: ::quote::__private::Span = span;
+
                                 ::quote::__private::push_ident_spanned(
                                     &mut _s,
                                     _span,
@@ -5063,8 +5656,10 @@ mod de {
                                 ::quote::__private::push_gt_spanned(&mut _s, _span);
                                 _s
                             };
+
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "try");
                                 ::quote::__private::push_bang(&mut _s);
                                 ::quote::__private::push_group(
@@ -5072,12 +5667,14 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::ToTokens::to_tokens(&func, &mut _s);
                                         ::quote::__private::push_group(
                                             &mut _s,
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_and(&mut _s);
                                                 ::quote::__private::push_ident(&mut _s, "mut");
                                                 ::quote::__private::push_ident(&mut _s, "__seq");
@@ -5096,13 +5693,16 @@ mod de {
                                 field.ty,
                                 path,
                             );
+
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_group(
                                     &mut _s,
                                     ::quote::__private::Delimiter::Brace,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::ToTokens::to_tokens(&wrapper, &mut _s);
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
@@ -5116,6 +5716,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "try");
                                                 ::quote::__private::push_bang(&mut _s);
                                                 ::quote::__private::push_group(
@@ -5123,6 +5724,7 @@ mod de {
                                                     ::quote::__private::Delimiter::Parenthesis,
                                                     {
                                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                                         ::quote::__private::push_colon2(&mut _s);
                                                         ::quote::__private::push_ident(&mut _s, "de");
@@ -5139,6 +5741,7 @@ mod de {
                                                             ::quote::__private::Delimiter::Parenthesis,
                                                             {
                                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                                 ::quote::__private::push_and(&mut _s);
                                                                 ::quote::__private::push_ident(&mut _s, "mut");
                                                                 ::quote::__private::push_ident(&mut _s, "__seq");
@@ -5165,9 +5768,11 @@ mod de {
                             }
                         }
                     };
+
                     let value_if_none = match field.attrs.default() {
                         attr::Default::Default => {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -5184,6 +5789,7 @@ mod de {
                         }
                         attr::Default::Path(path) => {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&path, &mut _s);
                             ::quote::__private::push_group(
                                 &mut _s,
@@ -5194,6 +5800,7 @@ mod de {
                         }
                         attr::Default::None => {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "return");
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
@@ -5205,6 +5812,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                     ::quote::__private::push_colon2(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "de");
@@ -5217,6 +5825,7 @@ mod de {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::ToTokens::to_tokens(&index_in_seq, &mut _s);
                                             ::quote::__private::push_comma(&mut _s);
                                             ::quote::__private::push_and(&mut _s);
@@ -5231,8 +5840,10 @@ mod de {
                             _s
                         }
                     };
+
                     let assign = {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "let");
                         ::quote::ToTokens::to_tokens(&var, &mut _s);
                         ::quote::__private::push_eq(&mut _s);
@@ -5243,6 +5854,7 @@ mod de {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "_serde");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -5253,6 +5865,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "__value");
                                         _s
                                     },
@@ -5271,6 +5884,7 @@ mod de {
                                     ::quote::__private::Delimiter::Brace,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::ToTokens::to_tokens(&value_if_none, &mut _s);
                                         _s
                                     },
@@ -5281,49 +5895,65 @@ mod de {
                         ::quote::__private::push_semi(&mut _s);
                         _s
                     };
+
                     index_in_seq += 1;
                     assign
                 }
             });
+
         let mut result = if is_struct {
             let names = fields.iter().map(|f| &f.member);
+
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::ToTokens::to_tokens(&type_path, &mut _s);
                 ::quote::__private::push_group(
                     &mut _s,
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         {
                             use ::quote::__private::ext::*;
+
                             let mut _i = 0usize;
+
                             let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                             #[allow(unused_mut)]
                             let (mut names, i) = names.quote_into_iter();
+
                             let has_iter = has_iter | i;
+
                             #[allow(unused_mut)]
                             let (mut vars, i) = vars.quote_into_iter();
+
                             let has_iter = has_iter | i;
                             let _: ::quote::__private::HasIterator = has_iter;
+
                             while true {
                                 let names = match names.next() {
                                     Some(_x) => ::quote::__private::RepInterp(_x),
                                     None => break,
                                 };
+
                                 let vars = match vars.next() {
                                     Some(_x) => ::quote::__private::RepInterp(_x),
                                     None => break,
                                 };
+
                                 if _i > 0 {
                                     ::quote::__private::push_comma(&mut _s);
                                 }
+
                                 _i += 1;
                                 ::quote::ToTokens::to_tokens(&names, &mut _s);
                                 ::quote::__private::push_colon(&mut _s);
                                 ::quote::ToTokens::to_tokens(&vars, &mut _s);
                             }
                         };
+
                         _s
                     },
                 );
@@ -5332,42 +5962,55 @@ mod de {
         } else {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::ToTokens::to_tokens(&type_path, &mut _s);
                 ::quote::__private::push_group(
                     &mut _s,
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         {
                             use ::quote::__private::ext::*;
+
                             let mut _i = 0usize;
+
                             let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                             #[allow(unused_mut)]
                             let (mut vars, i) = vars.quote_into_iter();
+
                             let has_iter = has_iter | i;
                             let _: ::quote::__private::HasIterator = has_iter;
+
                             while true {
                                 let vars = match vars.next() {
                                     Some(_x) => ::quote::__private::RepInterp(_x),
                                     None => break,
                                 };
+
                                 if _i > 0 {
                                     ::quote::__private::push_comma(&mut _s);
                                 }
+
                                 _i += 1;
                                 ::quote::ToTokens::to_tokens(&vars, &mut _s);
                             }
                         };
+
                         _s
                     },
                 );
                 _s
             }
         };
+
         if params.has_getter {
             let this = &params.this;
+
             result = {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -5384,6 +6027,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&result, &mut _s);
                         _s
                     },
@@ -5391,10 +6035,12 @@ mod de {
                 _s
             };
         }
+
         let let_default = match cattrs.default() {
             attr::Default::Default => {
                 Some({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::__private::push_ident(&mut _s, "__default");
                     ::quote::__private::push_colon(&mut _s);
@@ -5421,6 +6067,7 @@ mod de {
             attr::Default::Path(path) => {
                 Some({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::__private::push_ident(&mut _s, "__default");
                     ::quote::__private::push_colon(&mut _s);
@@ -5440,24 +6087,33 @@ mod de {
             }
             attr::Default::None => None,
         };
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::ToTokens::to_tokens(&let_default, &mut _s);
+
             {
                 use ::quote::__private::ext::*;
+
                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                 #[allow(unused_mut)]
                 let (mut let_values, i) = let_values.quote_into_iter();
+
                 let has_iter = has_iter | i;
                 let _: ::quote::__private::HasIterator = has_iter;
+
                 while true {
                     let let_values = match let_values.next() {
                         Some(_x) => ::quote::__private::RepInterp(_x),
                         None => break,
                     };
+
                     ::quote::ToTokens::to_tokens(&let_values, &mut _s);
                 }
             };
+
             ::quote::__private::push_ident(&mut _s, "_serde");
             ::quote::__private::push_colon2(&mut _s);
             ::quote::__private::push_ident(&mut _s, "__private");
@@ -5468,6 +6124,7 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&result, &mut _s);
                     _s
                 },
@@ -5475,6 +6132,7 @@ mod de {
             _s
         })
     }
+
     fn deserialize_newtype_struct(
         type_path: &TokenStream,
         params: &Parameters,
@@ -5482,12 +6140,16 @@ mod de {
     ) -> TokenStream {
         let delife = params.borrowed.de_lifetime();
         let field_ty = field.ty;
+
         let value = match field.attrs.deserialize_with() {
             None => {
                 let span = field.original.span();
+
                 let func = {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     let _span: ::quote::__private::Span = span;
+
                     ::quote::__private::push_lt_spanned(&mut _s, _span);
                     ::quote::ToTokens::to_tokens(&field_ty, &mut _s);
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "as");
@@ -5507,8 +6169,10 @@ mod de {
                     );
                     _s
                 };
+
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "try");
                     ::quote::__private::push_bang(&mut _s);
                     ::quote::__private::push_group(
@@ -5516,12 +6180,14 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&func, &mut _s);
                             ::quote::__private::push_group(
                                 &mut _s,
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__e");
                                     _s
                                 },
@@ -5534,6 +6200,7 @@ mod de {
             }
             Some(path) => {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "try");
                 ::quote::__private::push_bang(&mut _s);
                 ::quote::__private::push_group(
@@ -5541,12 +6208,14 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&path, &mut _s);
                         ::quote::__private::push_group(
                             &mut _s,
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__e");
                                 _s
                             },
@@ -5557,24 +6226,30 @@ mod de {
                 _s
             }
         };
+
         let mut result = {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::ToTokens::to_tokens(&type_path, &mut _s);
             ::quote::__private::push_group(
                 &mut _s,
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__field0");
                     _s
                 },
             );
             _s
         };
+
         if params.has_getter {
             let this = &params.this;
+
             result = {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -5591,6 +6266,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&result, &mut _s);
                         _s
                     },
@@ -5598,14 +6274,17 @@ mod de {
                 _s
             };
         }
+
         {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_pound(&mut _s);
             ::quote::__private::push_group(
                 &mut _s,
                 ::quote::__private::Delimiter::Bracket,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "inline");
                     _s
                 },
@@ -5620,6 +6299,7 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "self");
                     ::quote::__private::push_comma(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "__e");
@@ -5658,6 +6338,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::__private::push_ident(&mut _s, "__field0");
                     ::quote::__private::push_colon(&mut _s);
@@ -5675,6 +6356,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&result, &mut _s);
                             _s
                         },
@@ -5685,10 +6367,12 @@ mod de {
             _s
         }
     }
+
     enum Untagged {
         Yes,
         No,
     }
+
     fn deserialize_struct(
         variant_ident: Option<&syn::Ident>,
         params: &Parameters,
@@ -5703,23 +6387,29 @@ mod de {
             params,
         );
         let delife = params.borrowed.de_lifetime();
+
         let construct = if params.has_getter {
             let local = &params.local;
+
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::ToTokens::to_tokens(&local, &mut _s);
                 _s
             }
         } else {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::ToTokens::to_tokens(&this, &mut _s);
                 _s
             }
         };
+
         let type_path = match variant_ident {
             Some(variant_ident) => {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::ToTokens::to_tokens(&construct, &mut _s);
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::ToTokens::to_tokens(&variant_ident, &mut _s);
@@ -5727,6 +6417,7 @@ mod de {
             }
             None => construct,
         };
+
         let expecting = match variant_ident {
             Some(variant_ident) => {
                 let res = ::alloc::fmt::format(
@@ -5738,6 +6429,7 @@ mod de {
                         ],
                     ),
                 );
+
                 res
             }
             None => {
@@ -5747,29 +6439,36 @@ mod de {
                         &[::core::fmt::ArgumentV1::new_display(&params.type_name())],
                     ),
                 );
+
                 res
             }
         };
+
         let expecting = cattrs.expecting().unwrap_or(&expecting);
         let visit_seq = Stmts(
             deserialize_seq(&type_path, params, fields, true, cattrs, expecting),
         );
+
         let (field_visitor, fields_stmt, visit_map) = if cattrs.has_flatten() {
             deserialize_struct_as_map_visitor(&type_path, params, fields, cattrs)
         } else {
             deserialize_struct_as_struct_visitor(&type_path, params, fields, cattrs)
         };
+
         let field_visitor = Stmts(field_visitor);
         let fields_stmt = fields_stmt.map(Stmts);
         let visit_map = Stmts(visit_map);
+
         let visitor_expr = {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "__Visitor");
             ::quote::__private::push_group(
                 &mut _s,
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "marker");
                     ::quote::__private::push_colon(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "_serde");
@@ -5796,9 +6495,11 @@ mod de {
             );
             _s
         };
+
         let dispatch = if let Some(deserializer) = deserializer {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "Deserializer");
@@ -5809,6 +6510,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&deserializer, &mut _s);
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::ToTokens::to_tokens(&visitor_expr, &mut _s);
@@ -5820,6 +6522,7 @@ mod de {
         } else if is_enum && cattrs.has_flatten() {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "de");
@@ -5832,6 +6535,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "__variant");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::ToTokens::to_tokens(&visitor_expr, &mut _s);
@@ -5843,6 +6547,7 @@ mod de {
         } else if is_enum {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "de");
@@ -5855,6 +6560,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "__variant");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "FIELDS");
@@ -5868,6 +6574,7 @@ mod de {
         } else if cattrs.has_flatten() {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "Deserializer");
@@ -5878,6 +6585,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "__deserializer");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::ToTokens::to_tokens(&visitor_expr, &mut _s);
@@ -5888,8 +6596,10 @@ mod de {
             }
         } else {
             let type_name = cattrs.name().deserialize_name();
+
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "Deserializer");
@@ -5900,6 +6610,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "__deserializer");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -5913,31 +6624,38 @@ mod de {
                 _s
             }
         };
+
         let all_skipped = fields.iter().all(|field| field.attrs.skip_deserializing());
+
         let visitor_var = if all_skipped {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_underscore(&mut _s);
                 _s
             }
         } else {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "mut");
                 ::quote::__private::push_ident(&mut _s, "__seq");
                 _s
             }
         };
+
         let visit_seq = match *untagged {
             Untagged::No if !cattrs.has_flatten() => {
                 Some({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_pound(&mut _s);
                     ::quote::__private::push_group(
                         &mut _s,
                         ::quote::__private::Delimiter::Bracket,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "inline");
                             _s
                         },
@@ -5952,6 +6670,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "self");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::ToTokens::to_tokens(&visitor_var, &mut _s);
@@ -5992,6 +6711,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&visit_seq, &mut _s);
                             _s
                         },
@@ -6001,9 +6721,11 @@ mod de {
             }
             _ => None,
         };
+
         let visitor_seed = if is_enum && cattrs.has_flatten() {
             Some({
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "impl");
                 ::quote::ToTokens::to_tokens(&de_impl_generics, &mut _s);
                 ::quote::__private::push_ident(&mut _s, "_serde");
@@ -6023,6 +6745,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "type");
                         ::quote::__private::push_ident(&mut _s, "Value");
                         ::quote::__private::push_eq(&mut _s);
@@ -6039,6 +6762,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "self");
                                 ::quote::__private::push_comma(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__deserializer");
@@ -6077,6 +6801,7 @@ mod de {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "_serde");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "Deserializer");
@@ -6087,6 +6812,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "__deserializer");
                                         ::quote::__private::push_comma(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "self");
@@ -6104,8 +6830,10 @@ mod de {
         } else {
             None
         };
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::ToTokens::to_tokens(&field_visitor, &mut _s);
             ::quote::__private::push_ident(&mut _s, "struct");
             ::quote::__private::push_ident(&mut _s, "__Visitor");
@@ -6116,6 +6844,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "marker");
                     ::quote::__private::push_colon(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "_serde");
@@ -6167,6 +6896,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "type");
                     ::quote::__private::push_ident(&mut _s, "Value");
                     ::quote::__private::push_eq(&mut _s);
@@ -6180,6 +6910,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_and(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "self");
                             ::quote::__private::push_comma(&mut _s);
@@ -6208,6 +6939,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -6220,6 +6952,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__formatter");
                                     ::quote::__private::push_comma(&mut _s);
                                     ::quote::ToTokens::to_tokens(&expecting, &mut _s);
@@ -6236,6 +6969,7 @@ mod de {
                         ::quote::__private::Delimiter::Bracket,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "inline");
                             _s
                         },
@@ -6250,6 +6984,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "self");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "mut");
@@ -6291,6 +7026,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&visit_map, &mut _s);
                             _s
                         },
@@ -6304,6 +7040,7 @@ mod de {
             _s
         })
     }
+
     fn deserialize_enum(
         params: &Parameters,
         variants: &[Variant],
@@ -6328,6 +7065,7 @@ mod de {
             attr::TagType::None => deserialize_untagged_enum(params, variants, cattrs),
         }
     }
+
     fn prepare_enum_variant_enum(
         variants: &[Variant],
         cattrs: &attr::Container,
@@ -6336,6 +7074,7 @@ mod de {
             .iter()
             .enumerate()
             .filter(|&(_, variant)| !variant.attrs.skip_deserializing());
+
         let variant_names_idents: Vec<_> = deserialized_variants
             .clone()
             .map(|(i, variant)| {
@@ -6348,10 +7087,13 @@ mod de {
             .collect();
         let other_idx = deserialized_variants
             .position(|(_, variant)| variant.attrs.other());
+
         let variants_stmt = {
             let variant_names = variant_names_idents.iter().map(|(name, _, _)| name);
+
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "const");
                 ::quote::__private::push_ident(&mut _s, "VARIANTS");
                 ::quote::__private::push_colon(&mut _s);
@@ -6362,6 +7104,7 @@ mod de {
                     ::quote::__private::Delimiter::Bracket,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_and(&mut _s);
                         ::quote::__private::push_lifetime(&mut _s, "\'static");
                         ::quote::__private::push_ident(&mut _s, "str");
@@ -6375,26 +7118,35 @@ mod de {
                     ::quote::__private::Delimiter::Bracket,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         {
                             use ::quote::__private::ext::*;
+
                             let mut _i = 0usize;
+
                             let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                             #[allow(unused_mut)]
                             let (mut variant_names, i) = variant_names.quote_into_iter();
+
                             let has_iter = has_iter | i;
                             let _: ::quote::__private::HasIterator = has_iter;
+
                             while true {
                                 let variant_names = match variant_names.next() {
                                     Some(_x) => ::quote::__private::RepInterp(_x),
                                     None => break,
                                 };
+
                                 if _i > 0 {
                                     ::quote::__private::push_comma(&mut _s);
                                 }
+
                                 _i += 1;
                                 ::quote::ToTokens::to_tokens(&variant_names, &mut _s);
                             }
                         };
+
                         _s
                     },
                 );
@@ -6402,6 +7154,7 @@ mod de {
                 _s
             }
         };
+
         let variant_visitor = Stmts(
             deserialize_generated_identifier(
                 &variant_names_idents,
@@ -6410,8 +7163,10 @@ mod de {
                 other_idx,
             ),
         );
+
         (variants_stmt, variant_visitor)
     }
+
     fn deserialize_externally_tagged_enum(
         params: &Parameters,
         variants: &[Variant],
@@ -6423,6 +7178,7 @@ mod de {
         );
         let delife = params.borrowed.de_lifetime();
         let type_name = cattrs.name().deserialize_name();
+
         let expecting = {
             let res = ::alloc::fmt::format(
                 ::core::fmt::Arguments::new_v1(
@@ -6430,8 +7186,10 @@ mod de {
                     &[::core::fmt::ArgumentV1::new_display(&params.type_name())],
                 ),
             );
+
             res
         };
+
         let expecting = cattrs.expecting().unwrap_or(&expecting);
         let (variants_stmt, variant_visitor) = prepare_enum_variant_enum(
             variants,
@@ -6446,13 +7204,16 @@ mod de {
                 let block = Match(
                     deserialize_externally_tagged_variant(params, variant, cattrs),
                 );
+
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_group(
                         &mut _s,
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__Field");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::ToTokens::to_tokens(&variant_name, &mut _s);
@@ -6469,9 +7230,11 @@ mod de {
         let all_skipped = variants
             .iter()
             .all(|variant| variant.attrs.skip_deserializing());
+
         let match_variant = if all_skipped {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -6484,6 +7247,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "de");
@@ -6500,6 +7264,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__data");
                                 _s
                             },
@@ -6511,6 +7276,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__impossible");
                                 ::quote::__private::push_comma(&mut _s);
                                 ::quote::__private::push_underscore(&mut _s);
@@ -6533,6 +7299,7 @@ mod de {
         } else {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "match");
                 ::quote::__private::push_ident(&mut _s, "try");
                 ::quote::__private::push_bang(&mut _s);
@@ -6541,6 +7308,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "de");
@@ -6553,6 +7321,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__data");
                                 _s
                             },
@@ -6565,29 +7334,38 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         {
                             use ::quote::__private::ext::*;
+
                             let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                             #[allow(unused_mut)]
                             let (mut variant_arms, i) = variant_arms.quote_into_iter();
+
                             let has_iter = has_iter | i;
                             let _: ::quote::__private::HasIterator = has_iter;
+
                             while true {
                                 let variant_arms = match variant_arms.next() {
                                     Some(_x) => ::quote::__private::RepInterp(_x),
                                     None => break,
                                 };
+
                                 ::quote::ToTokens::to_tokens(&variant_arms, &mut _s);
                             }
                         };
+
                         _s
                     },
                 );
                 _s
             }
         };
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::ToTokens::to_tokens(&variant_visitor, &mut _s);
             ::quote::__private::push_ident(&mut _s, "struct");
             ::quote::__private::push_ident(&mut _s, "__Visitor");
@@ -6598,6 +7376,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "marker");
                     ::quote::__private::push_colon(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "_serde");
@@ -6649,6 +7428,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "type");
                     ::quote::__private::push_ident(&mut _s, "Value");
                     ::quote::__private::push_eq(&mut _s);
@@ -6662,6 +7442,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_and(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "self");
                             ::quote::__private::push_comma(&mut _s);
@@ -6690,6 +7471,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -6702,6 +7484,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__formatter");
                                     ::quote::__private::push_comma(&mut _s);
                                     ::quote::ToTokens::to_tokens(&expecting, &mut _s);
@@ -6721,6 +7504,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "self");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__data");
@@ -6761,6 +7545,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&match_variant, &mut _s);
                             _s
                         },
@@ -6779,6 +7564,7 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__deserializer");
                     ::quote::__private::push_comma(&mut _s);
                     ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -6791,6 +7577,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "marker");
                             ::quote::__private::push_colon(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "_serde");
@@ -6822,6 +7609,7 @@ mod de {
             _s
         })
     }
+
     fn deserialize_internally_tagged_enum(
         params: &Parameters,
         variants: &[Variant],
@@ -6845,6 +7633,7 @@ mod de {
                         cattrs,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -6868,6 +7657,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__tagged");
                                     ::quote::__private::push_dot(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "content");
@@ -6878,8 +7668,10 @@ mod de {
                         },
                     ),
                 );
+
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__Field");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::ToTokens::to_tokens(&variant_name, &mut _s);
@@ -6888,6 +7680,7 @@ mod de {
                     _s
                 }
             });
+
         let expecting = {
             let res = ::alloc::fmt::format(
                 ::core::fmt::Arguments::new_v1(
@@ -6895,11 +7688,15 @@ mod de {
                     &[::core::fmt::ArgumentV1::new_display(&params.type_name())],
                 ),
             );
+
             res
         };
+
         let expecting = cattrs.expecting().unwrap_or(&expecting);
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::ToTokens::to_tokens(&variant_visitor, &mut _s);
             ::quote::ToTokens::to_tokens(&variants_stmt, &mut _s);
             ::quote::__private::push_ident(&mut _s, "let");
@@ -6912,6 +7709,7 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "Deserializer");
@@ -6922,6 +7720,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__deserializer");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "_serde");
@@ -6945,6 +7744,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&tag, &mut _s);
                                     ::quote::__private::push_comma(&mut _s);
                                     ::quote::ToTokens::to_tokens(&expecting, &mut _s);
@@ -6967,27 +7767,35 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     {
                         use ::quote::__private::ext::*;
+
                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                         #[allow(unused_mut)]
                         let (mut variant_arms, i) = variant_arms.quote_into_iter();
+
                         let has_iter = has_iter | i;
                         let _: ::quote::__private::HasIterator = has_iter;
+
                         while true {
                             let variant_arms = match variant_arms.next() {
                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                 None => break,
                             };
+
                             ::quote::ToTokens::to_tokens(&variant_arms, &mut _s);
                         }
                     };
+
                     _s
                 },
             );
             _s
         })
     }
+
     fn deserialize_adjacently_tagged_enum(
         params: &Parameters,
         variants: &[Variant],
@@ -7017,13 +7825,16 @@ mod de {
                         cattrs,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__deserializer");
                             _s
                         },
                     ),
                 );
+
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__Field");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::ToTokens::to_tokens(&variant_index, &mut _s);
@@ -7033,6 +7844,7 @@ mod de {
                 }
             })
             .collect();
+
         let expecting = {
             let res = ::alloc::fmt::format(
                 ::core::fmt::Arguments::new_v1(
@@ -7040,14 +7852,18 @@ mod de {
                     &[::core::fmt::ArgumentV1::new_display(&params.type_name())],
                 ),
             );
+
             res
         };
+
         let expecting = cattrs.expecting().unwrap_or(&expecting);
         let type_name = cattrs.name().deserialize_name();
         let deny_unknown_fields = cattrs.deny_unknown_fields();
+
         let field_visitor_ty = if deny_unknown_fields {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -7060,6 +7876,7 @@ mod de {
         } else {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -7070,14 +7887,17 @@ mod de {
                 _s
             }
         };
+
         let tag_or_content = {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::ToTokens::to_tokens(&field_visitor_ty, &mut _s);
             ::quote::__private::push_group(
                 &mut _s,
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "tag");
                     ::quote::__private::push_colon(&mut _s);
                     ::quote::ToTokens::to_tokens(&tag, &mut _s);
@@ -7091,8 +7911,10 @@ mod de {
             );
             _s
         };
+
         let mut missing_content = {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "_serde");
             ::quote::__private::push_colon2(&mut _s);
             ::quote::__private::push_ident(&mut _s, "__private");
@@ -7103,6 +7925,7 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_lt(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "__A");
                     ::quote::__private::push_colon2(&mut _s);
@@ -7121,6 +7944,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&content, &mut _s);
                             _s
                         },
@@ -7130,7 +7954,9 @@ mod de {
             );
             _s
         };
+
         let mut missing_content_fallthrough = ::quote::__private::TokenStream::new();
+
         let missing_content_arms = variants
             .iter()
             .enumerate()
@@ -7138,9 +7964,11 @@ mod de {
             .filter_map(|(i, variant)| {
                 let variant_index = field_i(i);
                 let variant_ident = &variant.ident;
+
                 let arm = match variant.style {
                     Style::Unit => {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -7151,6 +7979,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&this, &mut _s);
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::ToTokens::to_tokens(&variant_ident, &mut _s);
@@ -7161,9 +7990,12 @@ mod de {
                     }
                     Style::Newtype if variant.attrs.deserialize_with().is_none() => {
                         let span = variant.original.span();
+
                         let func = {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             let _span: ::quote::__private::Span = span;
+
                             ::quote::__private::push_ident_spanned(
                                 &mut _s,
                                 _span,
@@ -7185,14 +8017,17 @@ mod de {
                             );
                             _s
                         };
+
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&func, &mut _s);
                             ::quote::__private::push_group(
                                 &mut _s,
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&content, &mut _s);
                                     _s
                                 },
@@ -7204,6 +8039,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&this, &mut _s);
                                     ::quote::__private::push_colon2(&mut _s);
                                     ::quote::ToTokens::to_tokens(&variant_ident, &mut _s);
@@ -7216,16 +8052,20 @@ mod de {
                     _ => {
                         missing_content_fallthrough = {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_underscore(&mut _s);
                             ::quote::__private::push_fat_arrow(&mut _s);
                             ::quote::ToTokens::to_tokens(&missing_content, &mut _s);
                             _s
                         };
+
                         return None;
                     }
                 };
+
                 Some({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__Field");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::ToTokens::to_tokens(&variant_index, &mut _s);
@@ -7236,9 +8076,11 @@ mod de {
                 })
             })
             .collect::<Vec<_>>();
+
         if !missing_content_arms.is_empty() {
             missing_content = {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "match");
                 ::quote::__private::push_ident(&mut _s, "__field");
                 ::quote::__private::push_group(
@@ -7246,26 +8088,33 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         {
                             use ::quote::__private::ext::*;
+
                             let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                             #[allow(unused_mut)]
                             let (mut missing_content_arms, i) = missing_content_arms
                                 .quote_into_iter();
+
                             let has_iter = has_iter | i;
                             let _: ::quote::__private::HasIterator = has_iter;
+
                             while true {
                                 let missing_content_arms = match missing_content_arms.next()
                                 {
                                     Some(_x) => ::quote::__private::RepInterp(_x),
                                     None => break,
                                 };
+
                                 ::quote::ToTokens::to_tokens(
                                     &missing_content_arms,
                                     &mut _s,
                                 );
                             }
                         };
+
                         ::quote::ToTokens::to_tokens(
                             &missing_content_fallthrough,
                             &mut _s,
@@ -7276,8 +8125,10 @@ mod de {
                 _s
             };
         }
+
         let next_key = {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "try");
             ::quote::__private::push_bang(&mut _s);
             ::quote::__private::push_group(
@@ -7285,6 +8136,7 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "de");
@@ -7297,6 +8149,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_and(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "mut");
                             ::quote::__private::push_ident(&mut _s, "__map");
@@ -7310,16 +8163,19 @@ mod de {
             );
             _s
         };
+
         let next_relevant_key = if deny_unknown_fields {
             next_key
         } else {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_group(
                     &mut _s,
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "let");
                         ::quote::__private::push_ident(&mut _s, "mut");
                         ::quote::__private::push_ident(&mut _s, "__rk");
@@ -7357,6 +8213,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__k");
                                 _s
                             },
@@ -7368,6 +8225,7 @@ mod de {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "match");
                                 ::quote::__private::push_ident(&mut _s, "__k");
                                 ::quote::__private::push_group(
@@ -7375,6 +8233,7 @@ mod de {
                                     ::quote::__private::Delimiter::Brace,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -7393,6 +8252,7 @@ mod de {
                                             ::quote::__private::Delimiter::Brace,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "let");
                                                 ::quote::__private::push_underscore(&mut _s);
                                                 ::quote::__private::push_eq(&mut _s);
@@ -7403,6 +8263,7 @@ mod de {
                                                     ::quote::__private::Delimiter::Parenthesis,
                                                     {
                                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                                         ::quote::__private::push_colon2(&mut _s);
                                                         ::quote::__private::push_ident(&mut _s, "de");
@@ -7423,6 +8284,7 @@ mod de {
                                                             ::quote::__private::Delimiter::Parenthesis,
                                                             {
                                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                                 ::quote::__private::push_and(&mut _s);
                                                                 ::quote::__private::push_ident(&mut _s, "mut");
                                                                 ::quote::__private::push_ident(&mut _s, "__map");
@@ -7457,6 +8319,7 @@ mod de {
                                             ::quote::__private::Delimiter::Brace,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "__rk");
                                                 ::quote::__private::push_eq(&mut _s);
                                                 ::quote::__private::push_ident(&mut _s, "_serde");
@@ -7469,6 +8332,7 @@ mod de {
                                                     ::quote::__private::Delimiter::Parenthesis,
                                                     {
                                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                                         ::quote::__private::push_colon2(&mut _s);
                                                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -7508,6 +8372,7 @@ mod de {
                                             ::quote::__private::Delimiter::Brace,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "__rk");
                                                 ::quote::__private::push_eq(&mut _s);
                                                 ::quote::__private::push_ident(&mut _s, "_serde");
@@ -7520,6 +8385,7 @@ mod de {
                                                     ::quote::__private::Delimiter::Parenthesis,
                                                     {
                                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                                         ::quote::__private::push_colon2(&mut _s);
                                                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -7554,8 +8420,10 @@ mod de {
                 _s
             }
         };
+
         let visit_remaining_keys = {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "match");
             ::quote::ToTokens::to_tokens(&next_relevant_key, &mut _s);
             ::quote::__private::push_group(
@@ -7563,6 +8431,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "__private");
@@ -7573,6 +8442,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -7591,6 +8461,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -7601,6 +8472,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_lt(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "__A");
                                     ::quote::__private::push_colon2(&mut _s);
@@ -7619,6 +8491,7 @@ mod de {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::ToTokens::to_tokens(&tag, &mut _s);
                                             _s
                                         },
@@ -7639,6 +8512,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -7657,6 +8531,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -7667,6 +8542,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_lt(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "__A");
                                     ::quote::__private::push_colon2(&mut _s);
@@ -7685,6 +8561,7 @@ mod de {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::ToTokens::to_tokens(&content, &mut _s);
                                             _s
                                         },
@@ -7711,6 +8588,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__ret");
                             _s
                         },
@@ -7721,9 +8599,11 @@ mod de {
             );
             _s
         };
+
         let finish_content_then_tag = if variant_arms.is_empty() {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "match");
                 ::quote::__private::push_ident(&mut _s, "try");
                 ::quote::__private::push_bang(&mut _s);
@@ -7732,6 +8612,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "de");
@@ -7748,6 +8629,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_and(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "mut");
                                 ::quote::__private::push_ident(&mut _s, "__map");
@@ -7767,6 +8649,7 @@ mod de {
         } else {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "let");
                 ::quote::__private::push_ident(&mut _s, "__ret");
                 ::quote::__private::push_eq(&mut _s);
@@ -7777,6 +8660,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "match");
                         ::quote::__private::push_ident(&mut _s, "try");
                         ::quote::__private::push_bang(&mut _s);
@@ -7785,6 +8669,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "_serde");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "de");
@@ -7797,6 +8682,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_and(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "mut");
                                         ::quote::__private::push_ident(&mut _s, "__map");
@@ -7811,21 +8697,28 @@ mod de {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 {
                                     use ::quote::__private::ext::*;
+
                                     let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                     #[allow(unused_mut)]
                                     let (mut variant_arms, i) = variant_arms.quote_into_iter();
+
                                     let has_iter = has_iter | i;
                                     let _: ::quote::__private::HasIterator = has_iter;
+
                                     while true {
                                         let variant_arms = match variant_arms.next() {
                                             Some(_x) => ::quote::__private::RepInterp(_x),
                                             None => break,
                                         };
+
                                         ::quote::ToTokens::to_tokens(&variant_arms, &mut _s);
                                     }
                                 };
+
                                 _s
                             },
                         );
@@ -7837,8 +8730,10 @@ mod de {
                 _s
             }
         };
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::ToTokens::to_tokens(&variant_visitor, &mut _s);
             ::quote::ToTokens::to_tokens(&variants_stmt, &mut _s);
             ::quote::__private::push_ident(&mut _s, "struct");
@@ -7850,6 +8745,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "field");
                     ::quote::__private::push_colon(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "__Field");
@@ -7905,6 +8801,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "type");
                     ::quote::__private::push_ident(&mut _s, "Value");
                     ::quote::__private::push_eq(&mut _s);
@@ -7921,6 +8818,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "self");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__deserializer");
@@ -7959,6 +8857,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "match");
                             ::quote::__private::push_ident(&mut _s, "self");
                             ::quote::__private::push_dot(&mut _s);
@@ -7968,21 +8867,28 @@ mod de {
                                 ::quote::__private::Delimiter::Brace,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     {
                                         use ::quote::__private::ext::*;
+
                                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                         #[allow(unused_mut)]
                                         let (mut variant_arms, i) = variant_arms.quote_into_iter();
+
                                         let has_iter = has_iter | i;
                                         let _: ::quote::__private::HasIterator = has_iter;
+
                                         while true {
                                             let variant_arms = match variant_arms.next() {
                                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                                 None => break,
                                             };
+
                                             ::quote::ToTokens::to_tokens(&variant_arms, &mut _s);
                                         }
                                     };
+
                                     _s
                                 },
                             );
@@ -8001,6 +8907,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "marker");
                     ::quote::__private::push_colon(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "_serde");
@@ -8052,6 +8959,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "type");
                     ::quote::__private::push_ident(&mut _s, "Value");
                     ::quote::__private::push_eq(&mut _s);
@@ -8065,6 +8973,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_and(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "self");
                             ::quote::__private::push_comma(&mut _s);
@@ -8093,6 +9002,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -8105,6 +9015,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__formatter");
                                     ::quote::__private::push_comma(&mut _s);
                                     ::quote::ToTokens::to_tokens(&expecting, &mut _s);
@@ -8124,6 +9035,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "self");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "mut");
@@ -8165,6 +9077,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "match");
                             ::quote::ToTokens::to_tokens(&next_relevant_key, &mut _s);
                             ::quote::__private::push_group(
@@ -8172,6 +9085,7 @@ mod de {
                                 ::quote::__private::Delimiter::Brace,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                     ::quote::__private::push_colon2(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "__private");
@@ -8182,6 +9096,7 @@ mod de {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "_serde");
                                             ::quote::__private::push_colon2(&mut _s);
                                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -8203,6 +9118,7 @@ mod de {
                                         ::quote::__private::Delimiter::Brace,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "let");
                                             ::quote::__private::push_ident(&mut _s, "__field");
                                             ::quote::__private::push_eq(&mut _s);
@@ -8213,6 +9129,7 @@ mod de {
                                                 ::quote::__private::Delimiter::Parenthesis,
                                                 {
                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                                     ::quote::__private::push_colon2(&mut _s);
                                                     ::quote::__private::push_ident(&mut _s, "de");
@@ -8225,6 +9142,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Parenthesis,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::push_and(&mut _s);
                                                             ::quote::__private::push_ident(&mut _s, "mut");
                                                             ::quote::__private::push_ident(&mut _s, "__map");
@@ -8242,6 +9160,7 @@ mod de {
                                                 ::quote::__private::Delimiter::Brace,
                                                 {
                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                                     ::quote::__private::push_colon2(&mut _s);
                                                     ::quote::__private::push_ident(&mut _s, "__private");
@@ -8252,6 +9171,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Parenthesis,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::push_ident(&mut _s, "_serde");
                                                             ::quote::__private::push_colon2(&mut _s);
                                                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -8273,6 +9193,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Brace,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::push_ident(&mut _s, "_serde");
                                                             ::quote::__private::push_colon2(&mut _s);
                                                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -8283,6 +9204,7 @@ mod de {
                                                                 ::quote::__private::Delimiter::Parenthesis,
                                                                 {
                                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                                     ::quote::__private::push_lt(&mut _s);
                                                                     ::quote::__private::push_ident(&mut _s, "__A");
                                                                     ::quote::__private::push_colon2(&mut _s);
@@ -8301,6 +9223,7 @@ mod de {
                                                                         ::quote::__private::Delimiter::Parenthesis,
                                                                         {
                                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                                             ::quote::ToTokens::to_tokens(&tag, &mut _s);
                                                                             _s
                                                                         },
@@ -8321,6 +9244,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Parenthesis,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::push_ident(&mut _s, "_serde");
                                                             ::quote::__private::push_colon2(&mut _s);
                                                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -8342,6 +9266,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Brace,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::push_ident(&mut _s, "let");
                                                             ::quote::__private::push_ident(&mut _s, "__ret");
                                                             ::quote::__private::push_eq(&mut _s);
@@ -8352,6 +9277,7 @@ mod de {
                                                                 ::quote::__private::Delimiter::Parenthesis,
                                                                 {
                                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                                                     ::quote::__private::push_colon2(&mut _s);
                                                                     ::quote::__private::push_ident(&mut _s, "de");
@@ -8364,6 +9290,7 @@ mod de {
                                                                         ::quote::__private::Delimiter::Parenthesis,
                                                                         {
                                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                                             ::quote::__private::push_and(&mut _s);
                                                                             ::quote::__private::push_ident(&mut _s, "mut");
                                                                             ::quote::__private::push_ident(&mut _s, "__map");
@@ -8374,6 +9301,7 @@ mod de {
                                                                                 ::quote::__private::Delimiter::Brace,
                                                                                 {
                                                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                                                     ::quote::__private::push_ident(&mut _s, "field");
                                                                                     ::quote::__private::push_colon(&mut _s);
                                                                                     ::quote::__private::push_ident(&mut _s, "__field");
@@ -8434,6 +9362,7 @@ mod de {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "_serde");
                                             ::quote::__private::push_colon2(&mut _s);
                                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -8455,6 +9384,7 @@ mod de {
                                         ::quote::__private::Delimiter::Brace,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "let");
                                             ::quote::__private::push_ident(&mut _s, "__content");
                                             ::quote::__private::push_eq(&mut _s);
@@ -8465,6 +9395,7 @@ mod de {
                                                 ::quote::__private::Delimiter::Parenthesis,
                                                 {
                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                                     ::quote::__private::push_colon2(&mut _s);
                                                     ::quote::__private::push_ident(&mut _s, "de");
@@ -8487,6 +9418,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Parenthesis,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::push_and(&mut _s);
                                                             ::quote::__private::push_ident(&mut _s, "mut");
                                                             ::quote::__private::push_ident(&mut _s, "__map");
@@ -8504,6 +9436,7 @@ mod de {
                                                 ::quote::__private::Delimiter::Brace,
                                                 {
                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                                     ::quote::__private::push_colon2(&mut _s);
                                                     ::quote::__private::push_ident(&mut _s, "__private");
@@ -8514,6 +9447,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Parenthesis,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::push_ident(&mut _s, "_serde");
                                                             ::quote::__private::push_colon2(&mut _s);
                                                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -8535,6 +9469,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Brace,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::push_ident(&mut _s, "let");
                                                             ::quote::__private::push_ident(&mut _s, "__deserializer");
                                                             ::quote::__private::push_eq(&mut _s);
@@ -8561,6 +9496,7 @@ mod de {
                                                                 ::quote::__private::Delimiter::Parenthesis,
                                                                 {
                                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                                     ::quote::__private::push_ident(&mut _s, "__content");
                                                                     _s
                                                                 },
@@ -8583,6 +9519,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Parenthesis,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::push_ident(&mut _s, "_serde");
                                                             ::quote::__private::push_colon2(&mut _s);
                                                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -8604,6 +9541,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Brace,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::push_ident(&mut _s, "_serde");
                                                             ::quote::__private::push_colon2(&mut _s);
                                                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -8614,6 +9552,7 @@ mod de {
                                                                 ::quote::__private::Delimiter::Parenthesis,
                                                                 {
                                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                                     ::quote::__private::push_lt(&mut _s);
                                                                     ::quote::__private::push_ident(&mut _s, "__A");
                                                                     ::quote::__private::push_colon2(&mut _s);
@@ -8632,6 +9571,7 @@ mod de {
                                                                         ::quote::__private::Delimiter::Parenthesis,
                                                                         {
                                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                                             ::quote::ToTokens::to_tokens(&content, &mut _s);
                                                                             _s
                                                                         },
@@ -8653,6 +9593,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Brace,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::push_ident(&mut _s, "_serde");
                                                             ::quote::__private::push_colon2(&mut _s);
                                                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -8663,6 +9604,7 @@ mod de {
                                                                 ::quote::__private::Delimiter::Parenthesis,
                                                                 {
                                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                                     ::quote::__private::push_lt(&mut _s);
                                                                     ::quote::__private::push_ident(&mut _s, "__A");
                                                                     ::quote::__private::push_colon2(&mut _s);
@@ -8681,6 +9623,7 @@ mod de {
                                                                         ::quote::__private::Delimiter::Parenthesis,
                                                                         {
                                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                                             ::quote::ToTokens::to_tokens(&tag, &mut _s);
                                                                             _s
                                                                         },
@@ -8708,6 +9651,7 @@ mod de {
                                         ::quote::__private::Delimiter::Brace,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "_serde");
                                             ::quote::__private::push_colon2(&mut _s);
                                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -8718,6 +9662,7 @@ mod de {
                                                 ::quote::__private::Delimiter::Parenthesis,
                                                 {
                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                     ::quote::__private::push_lt(&mut _s);
                                                     ::quote::__private::push_ident(&mut _s, "__A");
                                                     ::quote::__private::push_colon2(&mut _s);
@@ -8736,6 +9681,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Parenthesis,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::ToTokens::to_tokens(&tag, &mut _s);
                                                             _s
                                                         },
@@ -8762,6 +9708,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "self");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "mut");
@@ -8803,6 +9750,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "match");
                             ::quote::__private::push_ident(&mut _s, "try");
                             ::quote::__private::push_bang(&mut _s);
@@ -8811,6 +9759,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                     ::quote::__private::push_colon2(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "de");
@@ -8823,6 +9772,7 @@ mod de {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_and(&mut _s);
                                             ::quote::__private::push_ident(&mut _s, "mut");
                                             ::quote::__private::push_ident(&mut _s, "__seq");
@@ -8837,6 +9787,7 @@ mod de {
                                 ::quote::__private::Delimiter::Brace,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                     ::quote::__private::push_colon2(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "__private");
@@ -8847,6 +9798,7 @@ mod de {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "__field");
                                             _s
                                         },
@@ -8857,6 +9809,7 @@ mod de {
                                         ::quote::__private::Delimiter::Brace,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "match");
                                             ::quote::__private::push_ident(&mut _s, "try");
                                             ::quote::__private::push_bang(&mut _s);
@@ -8865,6 +9818,7 @@ mod de {
                                                 ::quote::__private::Delimiter::Parenthesis,
                                                 {
                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                                     ::quote::__private::push_colon2(&mut _s);
                                                     ::quote::__private::push_ident(&mut _s, "de");
@@ -8880,6 +9834,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Parenthesis,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::push_and(&mut _s);
                                                             ::quote::__private::push_ident(&mut _s, "mut");
                                                             ::quote::__private::push_ident(&mut _s, "__seq");
@@ -8890,6 +9845,7 @@ mod de {
                                                                 ::quote::__private::Delimiter::Brace,
                                                                 {
                                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                                     ::quote::__private::push_ident(&mut _s, "field");
                                                                     ::quote::__private::push_colon(&mut _s);
                                                                     ::quote::__private::push_ident(&mut _s, "__field");
@@ -8925,6 +9881,7 @@ mod de {
                                                 ::quote::__private::Delimiter::Brace,
                                                 {
                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                                     ::quote::__private::push_colon2(&mut _s);
                                                     ::quote::__private::push_ident(&mut _s, "__private");
@@ -8935,6 +9892,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Parenthesis,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::push_ident(&mut _s, "__ret");
                                                             _s
                                                         },
@@ -8950,6 +9908,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Parenthesis,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::push_ident(&mut _s, "__ret");
                                                             _s
                                                         },
@@ -8966,6 +9925,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Brace,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::push_ident(&mut _s, "_serde");
                                                             ::quote::__private::push_colon2(&mut _s);
                                                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -8976,6 +9936,7 @@ mod de {
                                                                 ::quote::__private::Delimiter::Parenthesis,
                                                                 {
                                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                                                     ::quote::__private::push_colon2(&mut _s);
                                                                     ::quote::__private::push_ident(&mut _s, "de");
@@ -8988,6 +9949,7 @@ mod de {
                                                                         ::quote::__private::Delimiter::Parenthesis,
                                                                         {
                                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                                             ::quote::__private::parse(&mut _s, "1");
                                                                             ::quote::__private::push_comma(&mut _s);
                                                                             ::quote::__private::push_and(&mut _s);
@@ -9018,6 +9980,7 @@ mod de {
                                         ::quote::__private::Delimiter::Brace,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "_serde");
                                             ::quote::__private::push_colon2(&mut _s);
                                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -9028,6 +9991,7 @@ mod de {
                                                 ::quote::__private::Delimiter::Parenthesis,
                                                 {
                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                                     ::quote::__private::push_colon2(&mut _s);
                                                     ::quote::__private::push_ident(&mut _s, "de");
@@ -9040,6 +10004,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Parenthesis,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::parse(&mut _s, "0");
                                                             ::quote::__private::push_comma(&mut _s);
                                                             ::quote::__private::push_and(&mut _s);
@@ -9072,6 +10037,7 @@ mod de {
                 ::quote::__private::Delimiter::Bracket,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_and(&mut _s);
                     ::quote::__private::push_lifetime(&mut _s, "\'static");
                     ::quote::__private::push_ident(&mut _s, "str");
@@ -9085,6 +10051,7 @@ mod de {
                 ::quote::__private::Delimiter::Bracket,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&tag, &mut _s);
                     ::quote::__private::push_comma(&mut _s);
                     ::quote::ToTokens::to_tokens(&content, &mut _s);
@@ -9102,6 +10069,7 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__deserializer");
                     ::quote::__private::push_comma(&mut _s);
                     ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -9114,6 +10082,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "marker");
                             ::quote::__private::push_colon(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "_serde");
@@ -9145,6 +10114,7 @@ mod de {
             _s
         })
     }
+
     fn deserialize_untagged_enum(
         params: &Parameters,
         variants: &[Variant],
@@ -9161,6 +10131,7 @@ mod de {
                         cattrs,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -9184,6 +10155,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_and(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "__content");
                                     _s
@@ -9194,6 +10166,7 @@ mod de {
                     ),
                 )
             });
+
         let fallthrough_msg = {
             let res = ::alloc::fmt::format(
                 ::core::fmt::Arguments::new_v1(
@@ -9201,11 +10174,15 @@ mod de {
                     &[::core::fmt::ArgumentV1::new_display(&params.type_name())],
                 ),
             );
+
             res
         };
+
         let fallthrough_msg = cattrs.expecting().unwrap_or(&fallthrough_msg);
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "let");
             ::quote::__private::push_ident(&mut _s, "__content");
             ::quote::__private::push_eq(&mut _s);
@@ -9216,6 +10193,7 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_lt(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
@@ -9236,6 +10214,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__deserializer");
                             _s
                         },
@@ -9244,18 +10223,24 @@ mod de {
                 },
             );
             ::quote::__private::push_semi(&mut _s);
+
             {
                 use ::quote::__private::ext::*;
+
                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                 #[allow(unused_mut)]
                 let (mut attempts, i) = attempts.quote_into_iter();
+
                 let has_iter = has_iter | i;
                 let _: ::quote::__private::HasIterator = has_iter;
+
                 while true {
                     let attempts = match attempts.next() {
                         Some(_x) => ::quote::__private::RepInterp(_x),
                         None => break,
                     };
+
                     ::quote::__private::push_ident(&mut _s, "if");
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::__private::push_ident(&mut _s, "_serde");
@@ -9268,6 +10253,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__ok");
                             _s
                         },
@@ -9279,6 +10265,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "return");
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
@@ -9290,6 +10277,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__ok");
                                     _s
                                 },
@@ -9300,6 +10288,7 @@ mod de {
                     );
                 }
             };
+
             ::quote::__private::push_ident(&mut _s, "_serde");
             ::quote::__private::push_colon2(&mut _s);
             ::quote::__private::push_ident(&mut _s, "__private");
@@ -9310,6 +10299,7 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "de");
@@ -9322,6 +10312,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&fallthrough_msg, &mut _s);
                             _s
                         },
@@ -9332,6 +10323,7 @@ mod de {
             _s
         })
     }
+
     fn deserialize_externally_tagged_variant(
         params: &Parameters,
         variant: &Variant,
@@ -9343,8 +10335,10 @@ mod de {
                 variant,
                 path,
             );
+
             return crate::fragment::Fragment::Block({
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::ToTokens::to_tokens(&wrapper, &mut _s);
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
@@ -9358,6 +10352,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "de");
@@ -9374,6 +10369,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__variant");
                                 _s
                             },
@@ -9386,12 +10382,16 @@ mod de {
                 _s
             });
         }
+
         let variant_ident = &variant.ident;
+
         match variant.style {
             Style::Unit => {
                 let this = &params.this;
+
                 crate::fragment::Fragment::Block({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "try");
                     ::quote::__private::push_bang(&mut _s);
                     ::quote::__private::push_group(
@@ -9399,6 +10399,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "de");
@@ -9411,6 +10412,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__variant");
                                     _s
                                 },
@@ -9429,6 +10431,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&this, &mut _s);
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::ToTokens::to_tokens(&variant_ident, &mut _s);
@@ -9467,6 +10470,7 @@ mod de {
             }
         }
     }
+
     fn deserialize_internally_tagged_variant(
         params: &Parameters,
         variant: &Variant,
@@ -9476,7 +10480,9 @@ mod de {
         if variant.attrs.deserialize_with().is_some() {
             return deserialize_untagged_variant(params, variant, cattrs, deserializer);
         }
+
         let variant_ident = &variant.ident;
+
         match effective_style(variant) {
             Style::Unit => {
                 let this = &params.this;
@@ -9487,13 +10493,16 @@ mod de {
                     .get(0)
                     .map(|field| {
                         let default = Expr(expr_is_missing(field, cattrs));
+
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_group(
                                 &mut _s,
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&default, &mut _s);
                                     _s
                                 },
@@ -9501,8 +10510,10 @@ mod de {
                             _s
                         }
                     });
+
                 crate::fragment::Fragment::Block({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "try");
                     ::quote::__private::push_bang(&mut _s);
                     ::quote::__private::push_group(
@@ -9510,6 +10521,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "Deserializer");
@@ -9520,6 +10532,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&deserializer, &mut _s);
                                     ::quote::__private::push_comma(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "_serde");
@@ -9539,6 +10552,7 @@ mod de {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::ToTokens::to_tokens(&type_name, &mut _s);
                                             ::quote::__private::push_comma(&mut _s);
                                             ::quote::ToTokens::to_tokens(&variant_name, &mut _s);
@@ -9562,6 +10576,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&this, &mut _s);
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::ToTokens::to_tokens(&variant_ident, &mut _s);
@@ -9597,6 +10612,7 @@ mod de {
             }
         }
     }
+
     fn deserialize_untagged_variant(
         params: &Parameters,
         variant: &Variant,
@@ -9605,8 +10621,10 @@ mod de {
     ) -> Fragment {
         if let Some(path) = variant.attrs.deserialize_with() {
             let unwrap_fn = unwrap_to_variant_closure(params, variant, false);
+
             return crate::fragment::Fragment::Block({
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -9619,12 +10637,14 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&path, &mut _s);
                         ::quote::__private::push_group(
                             &mut _s,
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&deserializer, &mut _s);
                                 _s
                             },
@@ -9637,7 +10657,9 @@ mod de {
                 _s
             });
         }
+
         let variant_ident = &variant.ident;
+
         match effective_style(variant) {
             Style::Unit => {
                 let this = &params.this;
@@ -9648,13 +10670,16 @@ mod de {
                     .get(0)
                     .map(|field| {
                         let default = Expr(expr_is_missing(field, cattrs));
+
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_group(
                                 &mut _s,
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&default, &mut _s);
                                     _s
                                 },
@@ -9662,8 +10687,10 @@ mod de {
                             _s
                         }
                     });
+
                 crate::fragment::Fragment::Expr({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "match");
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
@@ -9675,6 +10702,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&deserializer, &mut _s);
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "_serde");
@@ -9694,6 +10722,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&type_name, &mut _s);
                                     ::quote::__private::push_comma(&mut _s);
                                     ::quote::ToTokens::to_tokens(&variant_name, &mut _s);
@@ -9708,6 +10737,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -9718,6 +10748,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_group(
                                         &mut _s,
                                         ::quote::__private::Delimiter::Parenthesis,
@@ -9737,6 +10768,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&this, &mut _s);
                                     ::quote::__private::push_colon2(&mut _s);
                                     ::quote::ToTokens::to_tokens(&variant_ident, &mut _s);
@@ -9755,6 +10787,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__err");
                                     _s
                                 },
@@ -9770,6 +10803,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__err");
                                     _s
                                 },
@@ -9810,6 +10844,7 @@ mod de {
             }
         }
     }
+
     fn deserialize_externally_tagged_newtype_variant(
         variant_ident: &syn::Ident,
         params: &Parameters,
@@ -9817,11 +10852,14 @@ mod de {
         cattrs: &attr::Container,
     ) -> Fragment {
         let this = &params.this;
+
         if field.attrs.skip_deserializing() {
             let this = &params.this;
             let default = Expr(expr_is_missing(field, cattrs));
+
             return crate::fragment::Fragment::Block({
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "try");
                 ::quote::__private::push_bang(&mut _s);
                 ::quote::__private::push_group(
@@ -9829,6 +10867,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "de");
@@ -9841,6 +10880,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__variant");
                                 _s
                             },
@@ -9859,6 +10899,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&this, &mut _s);
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::ToTokens::to_tokens(&variant_ident, &mut _s);
@@ -9867,6 +10908,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&default, &mut _s);
                                 _s
                             },
@@ -9877,13 +10919,17 @@ mod de {
                 _s
             });
         }
+
         match field.attrs.deserialize_with() {
             None => {
                 let field_ty = field.ty;
                 let span = field.original.span();
+
                 let func = {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     let _span: ::quote::__private::Span = span;
+
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
                     ::quote::__private::push_colon2_spanned(&mut _s, _span);
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "de");
@@ -9905,8 +10951,10 @@ mod de {
                     ::quote::__private::push_gt_spanned(&mut _s, _span);
                     _s
                 };
+
                 crate::fragment::Fragment::Expr({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "__private");
@@ -9919,12 +10967,14 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&func, &mut _s);
                             ::quote::__private::push_group(
                                 &mut _s,
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__variant");
                                     _s
                                 },
@@ -9945,8 +10995,10 @@ mod de {
                     field.ty,
                     path,
                 );
+
                 crate::fragment::Fragment::Block({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&wrapper, &mut _s);
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
@@ -9960,6 +11012,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "de");
@@ -9976,6 +11029,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__variant");
                                     _s
                                 },
@@ -9992,6 +11046,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__wrapper");
                                     ::quote::__private::push_dot(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "value");
@@ -10006,6 +11061,7 @@ mod de {
             }
         }
     }
+
     fn deserialize_untagged_newtype_variant(
         variant_ident: &syn::Ident,
         params: &Parameters,
@@ -10014,12 +11070,16 @@ mod de {
     ) -> Fragment {
         let this = &params.this;
         let field_ty = field.ty;
+
         match field.attrs.deserialize_with() {
             None => {
                 let span = field.original.span();
+
                 let func = {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     let _span: ::quote::__private::Span = span;
+
                     ::quote::__private::push_lt_spanned(&mut _s, _span);
                     ::quote::ToTokens::to_tokens(&field_ty, &mut _s);
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "as");
@@ -10039,8 +11099,10 @@ mod de {
                     );
                     _s
                 };
+
                 crate::fragment::Fragment::Expr({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "__private");
@@ -10053,12 +11115,14 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&func, &mut _s);
                             ::quote::__private::push_group(
                                 &mut _s,
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&deserializer, &mut _s);
                                     _s
                                 },
@@ -10076,6 +11140,7 @@ mod de {
             Some(path) => {
                 crate::fragment::Fragment::Block({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::__private::push_ident(&mut _s, "__value");
                     ::quote::__private::push_colon(&mut _s);
@@ -10096,6 +11161,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&deserializer, &mut _s);
                             _s
                         },
@@ -10113,6 +11179,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__value");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::ToTokens::to_tokens(&this, &mut _s);
@@ -10126,6 +11193,7 @@ mod de {
             }
         }
     }
+
     fn deserialize_generated_identifier(
         fields: &[(String, Ident, Vec<String>)],
         cattrs: &attr::Container,
@@ -10134,19 +11202,24 @@ mod de {
     ) -> Fragment {
         let this = {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "__Field");
             _s
         };
+
         let field_idents: &Vec<_> = &fields.iter().map(|(_, ident, _)| ident).collect();
+
         let (ignore_variant, fallthrough) = if !is_variant && cattrs.has_flatten() {
             let ignore_variant = {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "__other");
                 ::quote::__private::push_group(
                     &mut _s,
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -10163,8 +11236,10 @@ mod de {
                 ::quote::__private::push_comma(&mut _s);
                 _s
             };
+
             let fallthrough = {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -10175,6 +11250,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "__Field");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__other");
@@ -10183,6 +11259,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__value");
                                 _s
                             },
@@ -10192,11 +11269,14 @@ mod de {
                 );
                 _s
             };
+
             (Some(ignore_variant), Some(fallthrough))
         } else if let Some(other_idx) = other_idx {
             let ignore_variant = fields[other_idx].1.clone();
+
             let fallthrough = {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -10207,6 +11287,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "__Field");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::ToTokens::to_tokens(&ignore_variant, &mut _s);
@@ -10215,18 +11296,22 @@ mod de {
                 );
                 _s
             };
+
             (None, Some(fallthrough))
         } else if is_variant || cattrs.deny_unknown_fields() {
             (None, None)
         } else {
             let ignore_variant = {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "__ignore");
                 ::quote::__private::push_comma(&mut _s);
                 _s
             };
+
             let fallthrough = {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -10237,6 +11322,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "__Field");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__ignore");
@@ -10245,8 +11331,10 @@ mod de {
                 );
                 _s
             };
+
             (Some(ignore_variant), Some(fallthrough))
         };
+
         let visitor_impl = Stmts(
             deserialize_identifier(
                 &this,
@@ -10258,9 +11346,11 @@ mod de {
                 None,
             ),
         );
+
         let lifetime = if !is_variant && cattrs.has_flatten() {
             Some({
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_lt(&mut _s);
                 ::quote::__private::push_lifetime(&mut _s, "\'de");
                 ::quote::__private::push_gt(&mut _s);
@@ -10269,20 +11359,24 @@ mod de {
         } else {
             None
         };
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_pound(&mut _s);
             ::quote::__private::push_group(
                 &mut _s,
                 ::quote::__private::Delimiter::Bracket,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "allow");
                     ::quote::__private::push_group(
                         &mut _s,
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(
                                 &mut _s,
                                 "non_camel_case_types",
@@ -10301,22 +11395,29 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     {
                         use ::quote::__private::ext::*;
+
                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                         #[allow(unused_mut)]
                         let (mut field_idents, i) = field_idents.quote_into_iter();
+
                         let has_iter = has_iter | i;
                         let _: ::quote::__private::HasIterator = has_iter;
+
                         while true {
                             let field_idents = match field_idents.next() {
                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                 None => break,
                             };
+
                             ::quote::ToTokens::to_tokens(&field_idents, &mut _s);
                             ::quote::__private::push_comma(&mut _s);
                         }
                     };
+
                     ::quote::ToTokens::to_tokens(&ignore_variant, &mut _s);
                     _s
                 },
@@ -10343,6 +11444,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "type");
                     ::quote::__private::push_ident(&mut _s, "Value");
                     ::quote::__private::push_eq(&mut _s);
@@ -10371,12 +11473,14 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_pound(&mut _s);
                     ::quote::__private::push_group(
                         &mut _s,
                         ::quote::__private::Delimiter::Bracket,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "inline");
                             _s
                         },
@@ -10391,6 +11495,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__deserializer");
                             ::quote::__private::push_colon(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__D");
@@ -10425,6 +11530,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "Deserializer");
@@ -10438,6 +11544,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__deserializer");
                                     ::quote::__private::push_comma(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "__FieldVisitor");
@@ -10453,6 +11560,7 @@ mod de {
             _s
         })
     }
+
     fn deserialize_custom_identifier(
         params: &Parameters,
         variants: &[Variant],
@@ -10465,20 +11573,27 @@ mod de {
                 ::core::panicking::panic("internal error: entered unreachable code")
             }
         };
+
         let this = &params.this;
+
         let this = {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::ToTokens::to_tokens(&this, &mut _s);
             _s
         };
+
         let (ordinary, fallthrough, fallthrough_borrowed) = if let Some(last) = variants
             .last()
         {
             let last_ident = &last.ident;
+
             if last.attrs.other() {
                 let ordinary = &variants[..variants.len() - 1];
+
                 let fallthrough = {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "__private");
@@ -10489,6 +11604,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&this, &mut _s);
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::ToTokens::to_tokens(&last_ident, &mut _s);
@@ -10497,12 +11613,15 @@ mod de {
                     );
                     _s
                 };
+
                 (ordinary, Some(fallthrough), None)
             } else if let Style::Newtype = last.style {
                 let ordinary = &variants[..variants.len() - 1];
+
                 let fallthrough = |value| {
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -10515,6 +11634,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "_serde");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "Deserialize");
@@ -10525,6 +11645,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -10542,6 +11663,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::ToTokens::to_tokens(&value, &mut _s);
                                                 _s
                                             },
@@ -10559,11 +11681,13 @@ mod de {
                         _s
                     }
                 };
+
                 (
                     ordinary,
                     Some(
                         fallthrough({
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__value");
                             _s
                         }),
@@ -10571,6 +11695,7 @@ mod de {
                     Some(
                         fallthrough({
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -10583,6 +11708,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__value");
                                     _s
                                 },
@@ -10597,6 +11723,7 @@ mod de {
         } else {
             (variants, None, None)
         };
+
         let names_idents: Vec<_> = ordinary
             .iter()
             .map(|variant| {
@@ -10608,11 +11735,13 @@ mod de {
             })
             .collect();
         let names = names_idents.iter().map(|(name, _, _)| name);
+
         let names_const = if fallthrough.is_some() {
             None
         } else if is_variant {
             let variants = {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "const");
                 ::quote::__private::push_ident(&mut _s, "VARIANTS");
                 ::quote::__private::push_colon(&mut _s);
@@ -10623,6 +11752,7 @@ mod de {
                     ::quote::__private::Delimiter::Bracket,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_and(&mut _s);
                         ::quote::__private::push_lifetime(&mut _s, "\'static");
                         ::quote::__private::push_ident(&mut _s, "str");
@@ -10636,36 +11766,47 @@ mod de {
                     ::quote::__private::Delimiter::Bracket,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         {
                             use ::quote::__private::ext::*;
+
                             let mut _i = 0usize;
+
                             let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                             #[allow(unused_mut)]
                             let (mut names, i) = names.quote_into_iter();
+
                             let has_iter = has_iter | i;
                             let _: ::quote::__private::HasIterator = has_iter;
+
                             while true {
                                 let names = match names.next() {
                                     Some(_x) => ::quote::__private::RepInterp(_x),
                                     None => break,
                                 };
+
                                 if _i > 0 {
                                     ::quote::__private::push_comma(&mut _s);
                                 }
+
                                 _i += 1;
                                 ::quote::ToTokens::to_tokens(&names, &mut _s);
                             }
                         };
+
                         _s
                     },
                 );
                 ::quote::__private::push_semi(&mut _s);
                 _s
             };
+
             Some(variants)
         } else {
             let fields = {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "const");
                 ::quote::__private::push_ident(&mut _s, "FIELDS");
                 ::quote::__private::push_colon(&mut _s);
@@ -10676,6 +11817,7 @@ mod de {
                     ::quote::__private::Delimiter::Bracket,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_and(&mut _s);
                         ::quote::__private::push_lifetime(&mut _s, "\'static");
                         ::quote::__private::push_ident(&mut _s, "str");
@@ -10689,34 +11831,45 @@ mod de {
                     ::quote::__private::Delimiter::Bracket,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         {
                             use ::quote::__private::ext::*;
+
                             let mut _i = 0usize;
+
                             let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                             #[allow(unused_mut)]
                             let (mut names, i) = names.quote_into_iter();
+
                             let has_iter = has_iter | i;
                             let _: ::quote::__private::HasIterator = has_iter;
+
                             while true {
                                 let names = match names.next() {
                                     Some(_x) => ::quote::__private::RepInterp(_x),
                                     None => break,
                                 };
+
                                 if _i > 0 {
                                     ::quote::__private::push_comma(&mut _s);
                                 }
+
                                 _i += 1;
                                 ::quote::ToTokens::to_tokens(&names, &mut _s);
                             }
                         };
+
                         _s
                     },
                 );
                 ::quote::__private::push_semi(&mut _s);
                 _s
             };
+
             Some(fields)
         };
+
         let (de_impl_generics, de_ty_generics, ty_generics, where_clause) = split_with_de_lifetime(
             params,
         );
@@ -10732,8 +11885,10 @@ mod de {
                 cattrs.expecting(),
             ),
         );
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::ToTokens::to_tokens(&names_const, &mut _s);
             ::quote::__private::push_ident(&mut _s, "struct");
             ::quote::__private::push_ident(&mut _s, "__FieldVisitor");
@@ -10744,6 +11899,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "marker");
                     ::quote::__private::push_colon(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "_serde");
@@ -10795,6 +11951,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "type");
                     ::quote::__private::push_ident(&mut _s, "Value");
                     ::quote::__private::push_eq(&mut _s);
@@ -10814,6 +11971,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "marker");
                     ::quote::__private::push_colon(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "_serde");
@@ -10849,6 +12007,7 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__deserializer");
                     ::quote::__private::push_comma(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "__visitor");
@@ -10858,6 +12017,7 @@ mod de {
             _s
         })
     }
+
     fn deserialize_identifier(
         this: &TokenStream,
         fields: &[(String, Ident, Vec<String>)],
@@ -10868,9 +12028,11 @@ mod de {
         expecting: Option<&str>,
     ) -> Fragment {
         let mut flat_fields = Vec::new();
+
         for (_, ident, aliases) in fields {
             flat_fields.extend(aliases.iter().map(|alias| (alias, ident)));
         }
+
         let field_strs: &Vec<_> = &flat_fields.iter().map(|(name, _)| name).collect();
         let field_bytes: &Vec<_> = &flat_fields
             .iter()
@@ -10880,6 +12042,7 @@ mod de {
             .iter()
             .map(|(_, ident)| {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::ToTokens::to_tokens(&this, &mut _s);
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::ToTokens::to_tokens(&ident, &mut _s);
@@ -10890,6 +12053,7 @@ mod de {
             .iter()
             .map(|(_, ident, _)| {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::ToTokens::to_tokens(&this, &mut _s);
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::ToTokens::to_tokens(&ident, &mut _s);
@@ -10900,12 +12064,15 @@ mod de {
             .unwrap_or(
                 if is_variant { "variant identifier" } else { "field identifier" },
             );
+
         let index_expecting = if is_variant { "variant" } else { "field" };
+
         let bytes_to_str = if fallthrough.is_some() || collect_other_fields {
             None
         } else {
             Some({
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "let");
                 ::quote::__private::push_ident(&mut _s, "__value");
                 ::quote::__private::push_eq(&mut _s);
@@ -10920,6 +12087,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "__value");
                         _s
                     },
@@ -10928,6 +12096,7 @@ mod de {
                 _s
             })
         };
+
         let (
             value_as_str_content,
             value_as_borrowed_str_content,
@@ -10937,6 +12106,7 @@ mod de {
             (
                 Some({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::__private::push_ident(&mut _s, "__value");
                     ::quote::__private::push_eq(&mut _s);
@@ -10954,6 +12124,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -10966,6 +12137,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__value");
                                     _s
                                 },
@@ -10978,6 +12150,7 @@ mod de {
                 }),
                 Some({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::__private::push_ident(&mut _s, "__value");
                     ::quote::__private::push_eq(&mut _s);
@@ -10995,6 +12168,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__value");
                             _s
                         },
@@ -11004,6 +12178,7 @@ mod de {
                 }),
                 Some({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::__private::push_ident(&mut _s, "__value");
                     ::quote::__private::push_eq(&mut _s);
@@ -11021,6 +12196,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__value");
                             ::quote::__private::push_dot(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "to_vec");
@@ -11037,6 +12213,7 @@ mod de {
                 }),
                 Some({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::__private::push_ident(&mut _s, "__value");
                     ::quote::__private::push_eq(&mut _s);
@@ -11054,6 +12231,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__value");
                             _s
                         },
@@ -11065,12 +12243,15 @@ mod de {
         } else {
             (None, None, None, None)
         };
+
         let fallthrough_arm_tokens;
+
         let fallthrough_arm = if let Some(fallthrough) = &fallthrough {
             fallthrough
         } else if is_variant {
             fallthrough_arm_tokens = {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -11081,6 +12262,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "de");
@@ -11093,6 +12275,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__value");
                                 ::quote::__private::push_comma(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "VARIANTS");
@@ -11104,10 +12287,12 @@ mod de {
                 );
                 _s
             };
+
             &fallthrough_arm_tokens
         } else {
             fallthrough_arm_tokens = {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -11118,6 +12303,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "de");
@@ -11130,6 +12316,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__value");
                                 ::quote::__private::push_comma(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "FIELDS");
@@ -11141,9 +12328,12 @@ mod de {
                 );
                 _s
             };
+
             &fallthrough_arm_tokens
         };
+
         let u64_fallthrough_arm_tokens;
+
         let u64_fallthrough_arm = if let Some(fallthrough) = &fallthrough {
             fallthrough
         } else {
@@ -11157,10 +12347,13 @@ mod de {
                         ],
                     ),
                 );
+
                 res
             };
+
             u64_fallthrough_arm_tokens = {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -11171,6 +12364,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "de");
@@ -11183,6 +12377,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "_serde");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "de");
@@ -11195,6 +12390,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "__value");
                                         _s
                                     },
@@ -11211,12 +12407,16 @@ mod de {
                 );
                 _s
             };
+
             &u64_fallthrough_arm_tokens
         };
+
         let variant_indices = 0_u64..;
+
         let visit_other = if collect_other_fields {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "fn");
                 ::quote::__private::push_ident(&mut _s, "visit_bool");
                 ::quote::__private::push_lt(&mut _s);
@@ -11227,6 +12427,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "self");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__value");
@@ -11262,6 +12463,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -11272,6 +12474,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__Field");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__other");
@@ -11280,6 +12483,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -11294,6 +12498,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "__value");
                                                 _s
                                             },
@@ -11317,6 +12522,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "self");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__value");
@@ -11352,6 +12558,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -11362,6 +12569,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__Field");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__other");
@@ -11370,6 +12578,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -11384,6 +12593,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "__value");
                                                 _s
                                             },
@@ -11407,6 +12617,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "self");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__value");
@@ -11442,6 +12653,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -11452,6 +12664,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__Field");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__other");
@@ -11460,6 +12673,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -11474,6 +12688,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "__value");
                                                 _s
                                             },
@@ -11497,6 +12712,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "self");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__value");
@@ -11532,6 +12748,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -11542,6 +12759,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__Field");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__other");
@@ -11550,6 +12768,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -11564,6 +12783,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "__value");
                                                 _s
                                             },
@@ -11587,6 +12807,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "self");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__value");
@@ -11622,6 +12843,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -11632,6 +12854,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__Field");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__other");
@@ -11640,6 +12863,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -11654,6 +12878,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "__value");
                                                 _s
                                             },
@@ -11677,6 +12902,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "self");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__value");
@@ -11712,6 +12938,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -11722,6 +12949,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__Field");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__other");
@@ -11730,6 +12958,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -11744,6 +12973,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "__value");
                                                 _s
                                             },
@@ -11767,6 +12997,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "self");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__value");
@@ -11802,6 +13033,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -11812,6 +13044,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__Field");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__other");
@@ -11820,6 +13053,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -11834,6 +13068,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "__value");
                                                 _s
                                             },
@@ -11857,6 +13092,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "self");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__value");
@@ -11892,6 +13128,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -11902,6 +13139,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__Field");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__other");
@@ -11910,6 +13148,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -11924,6 +13163,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "__value");
                                                 _s
                                             },
@@ -11947,6 +13187,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "self");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__value");
@@ -11982,6 +13223,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -11992,6 +13234,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__Field");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__other");
@@ -12000,6 +13243,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -12014,6 +13258,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "__value");
                                                 _s
                                             },
@@ -12037,6 +13282,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "self");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__value");
@@ -12072,6 +13318,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -12082,6 +13329,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__Field");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__other");
@@ -12090,6 +13338,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -12104,6 +13353,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "__value");
                                                 _s
                                             },
@@ -12127,6 +13377,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "self");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__value");
@@ -12162,6 +13413,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -12172,6 +13424,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__Field");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__other");
@@ -12180,6 +13433,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -12194,6 +13448,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "__value");
                                                 _s
                                             },
@@ -12217,6 +13472,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "self");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__value");
@@ -12252,6 +13508,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -12262,6 +13519,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__Field");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__other");
@@ -12270,6 +13528,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -12284,6 +13543,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "__value");
                                                 _s
                                             },
@@ -12307,6 +13567,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "self");
                         _s
                     },
@@ -12338,6 +13599,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -12348,6 +13610,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__Field");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__other");
@@ -12356,6 +13619,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -12379,6 +13643,7 @@ mod de {
         } else {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "fn");
                 ::quote::__private::push_ident(&mut _s, "visit_u64");
                 ::quote::__private::push_lt(&mut _s);
@@ -12389,6 +13654,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "self");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__value");
@@ -12424,6 +13690,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "match");
                         ::quote::__private::push_ident(&mut _s, "__value");
                         ::quote::__private::push_group(
@@ -12431,27 +13698,36 @@ mod de {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 {
                                     use ::quote::__private::ext::*;
+
                                     let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                     #[allow(unused_mut)]
                                     let (mut variant_indices, i) = variant_indices
                                         .quote_into_iter();
+
                                     let has_iter = has_iter | i;
+
                                     #[allow(unused_mut)]
                                     let (mut main_constructors, i) = main_constructors
                                         .quote_into_iter();
+
                                     let has_iter = has_iter | i;
                                     let _: ::quote::__private::HasIterator = has_iter;
+
                                     while true {
                                         let variant_indices = match variant_indices.next() {
                                             Some(_x) => ::quote::__private::RepInterp(_x),
                                             None => break,
                                         };
+
                                         let main_constructors = match main_constructors.next() {
                                             Some(_x) => ::quote::__private::RepInterp(_x),
                                             None => break,
                                         };
+
                                         ::quote::ToTokens::to_tokens(&variant_indices, &mut _s);
                                         ::quote::__private::push_fat_arrow(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "_serde");
@@ -12464,6 +13740,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::ToTokens::to_tokens(&main_constructors, &mut _s);
                                                 _s
                                             },
@@ -12471,6 +13748,7 @@ mod de {
                                         ::quote::__private::push_comma(&mut _s);
                                     }
                                 };
+
                                 ::quote::__private::push_underscore(&mut _s);
                                 ::quote::__private::push_fat_arrow(&mut _s);
                                 ::quote::ToTokens::to_tokens(&u64_fallthrough_arm, &mut _s);
@@ -12484,12 +13762,15 @@ mod de {
                 _s
             }
         };
+
         let visit_borrowed = if fallthrough_borrowed.is_some() || collect_other_fields {
             let fallthrough_borrowed_arm = fallthrough_borrowed
                 .as_ref()
                 .unwrap_or(fallthrough_arm);
+
             Some({
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "fn");
                 ::quote::__private::push_ident(&mut _s, "visit_borrowed_str");
                 ::quote::__private::push_lt(&mut _s);
@@ -12500,6 +13781,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "self");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__value");
@@ -12537,6 +13819,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "match");
                         ::quote::__private::push_ident(&mut _s, "__value");
                         ::quote::__private::push_group(
@@ -12544,25 +13827,34 @@ mod de {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 {
                                     use ::quote::__private::ext::*;
+
                                     let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                     #[allow(unused_mut)]
                                     let (mut field_strs, i) = field_strs.quote_into_iter();
+
                                     let has_iter = has_iter | i;
+
                                     #[allow(unused_mut)]
                                     let (mut constructors, i) = constructors.quote_into_iter();
+
                                     let has_iter = has_iter | i;
                                     let _: ::quote::__private::HasIterator = has_iter;
+
                                     while true {
                                         let field_strs = match field_strs.next() {
                                             Some(_x) => ::quote::__private::RepInterp(_x),
                                             None => break,
                                         };
+
                                         let constructors = match constructors.next() {
                                             Some(_x) => ::quote::__private::RepInterp(_x),
                                             None => break,
                                         };
+
                                         ::quote::ToTokens::to_tokens(&field_strs, &mut _s);
                                         ::quote::__private::push_fat_arrow(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "_serde");
@@ -12575,6 +13867,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::ToTokens::to_tokens(&constructors, &mut _s);
                                                 _s
                                             },
@@ -12582,6 +13875,7 @@ mod de {
                                         ::quote::__private::push_comma(&mut _s);
                                     }
                                 };
+
                                 ::quote::__private::push_underscore(&mut _s);
                                 ::quote::__private::push_fat_arrow(&mut _s);
                                 ::quote::__private::push_group(
@@ -12589,6 +13883,7 @@ mod de {
                                     ::quote::__private::Delimiter::Brace,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::ToTokens::to_tokens(
                                             &value_as_borrowed_str_content,
                                             &mut _s,
@@ -12616,6 +13911,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "self");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__value");
@@ -12627,6 +13923,7 @@ mod de {
                             ::quote::__private::Delimiter::Bracket,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "u8");
                                 _s
                             },
@@ -12661,6 +13958,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "match");
                         ::quote::__private::push_ident(&mut _s, "__value");
                         ::quote::__private::push_group(
@@ -12668,25 +13966,34 @@ mod de {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 {
                                     use ::quote::__private::ext::*;
+
                                     let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                     #[allow(unused_mut)]
                                     let (mut field_bytes, i) = field_bytes.quote_into_iter();
+
                                     let has_iter = has_iter | i;
+
                                     #[allow(unused_mut)]
                                     let (mut constructors, i) = constructors.quote_into_iter();
+
                                     let has_iter = has_iter | i;
                                     let _: ::quote::__private::HasIterator = has_iter;
+
                                     while true {
                                         let field_bytes = match field_bytes.next() {
                                             Some(_x) => ::quote::__private::RepInterp(_x),
                                             None => break,
                                         };
+
                                         let constructors = match constructors.next() {
                                             Some(_x) => ::quote::__private::RepInterp(_x),
                                             None => break,
                                         };
+
                                         ::quote::ToTokens::to_tokens(&field_bytes, &mut _s);
                                         ::quote::__private::push_fat_arrow(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "_serde");
@@ -12699,6 +14006,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::ToTokens::to_tokens(&constructors, &mut _s);
                                                 _s
                                             },
@@ -12706,6 +14014,7 @@ mod de {
                                         ::quote::__private::push_comma(&mut _s);
                                     }
                                 };
+
                                 ::quote::__private::push_underscore(&mut _s);
                                 ::quote::__private::push_fat_arrow(&mut _s);
                                 ::quote::__private::push_group(
@@ -12713,6 +14022,7 @@ mod de {
                                     ::quote::__private::Delimiter::Brace,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::ToTokens::to_tokens(&bytes_to_str, &mut _s);
                                         ::quote::ToTokens::to_tokens(
                                             &value_as_borrowed_bytes_content,
@@ -12736,8 +14046,10 @@ mod de {
         } else {
             None
         };
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "fn");
             ::quote::__private::push_ident(&mut _s, "expecting");
             ::quote::__private::push_group(
@@ -12745,6 +14057,7 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_and(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "self");
                     ::quote::__private::push_comma(&mut _s);
@@ -12773,6 +14086,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "__private");
@@ -12785,6 +14099,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__formatter");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::ToTokens::to_tokens(&expecting, &mut _s);
@@ -12805,6 +14120,7 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "self");
                     ::quote::__private::push_comma(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "__value");
@@ -12841,6 +14157,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "match");
                     ::quote::__private::push_ident(&mut _s, "__value");
                     ::quote::__private::push_group(
@@ -12848,25 +14165,34 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             {
                                 use ::quote::__private::ext::*;
+
                                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                 #[allow(unused_mut)]
                                 let (mut field_strs, i) = field_strs.quote_into_iter();
+
                                 let has_iter = has_iter | i;
+
                                 #[allow(unused_mut)]
                                 let (mut constructors, i) = constructors.quote_into_iter();
+
                                 let has_iter = has_iter | i;
                                 let _: ::quote::__private::HasIterator = has_iter;
+
                                 while true {
                                     let field_strs = match field_strs.next() {
                                         Some(_x) => ::quote::__private::RepInterp(_x),
                                         None => break,
                                     };
+
                                     let constructors = match constructors.next() {
                                         Some(_x) => ::quote::__private::RepInterp(_x),
                                         None => break,
                                     };
+
                                     ::quote::ToTokens::to_tokens(&field_strs, &mut _s);
                                     ::quote::__private::push_fat_arrow(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "_serde");
@@ -12879,6 +14205,7 @@ mod de {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::ToTokens::to_tokens(&constructors, &mut _s);
                                             _s
                                         },
@@ -12886,6 +14213,7 @@ mod de {
                                     ::quote::__private::push_comma(&mut _s);
                                 }
                             };
+
                             ::quote::__private::push_underscore(&mut _s);
                             ::quote::__private::push_fat_arrow(&mut _s);
                             ::quote::__private::push_group(
@@ -12893,6 +14221,7 @@ mod de {
                                 ::quote::__private::Delimiter::Brace,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(
                                         &value_as_str_content,
                                         &mut _s,
@@ -12917,6 +14246,7 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "self");
                     ::quote::__private::push_comma(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "__value");
@@ -12927,6 +14257,7 @@ mod de {
                         ::quote::__private::Delimiter::Bracket,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "u8");
                             _s
                         },
@@ -12961,6 +14292,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "match");
                     ::quote::__private::push_ident(&mut _s, "__value");
                     ::quote::__private::push_group(
@@ -12968,25 +14300,34 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             {
                                 use ::quote::__private::ext::*;
+
                                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                 #[allow(unused_mut)]
                                 let (mut field_bytes, i) = field_bytes.quote_into_iter();
+
                                 let has_iter = has_iter | i;
+
                                 #[allow(unused_mut)]
                                 let (mut constructors, i) = constructors.quote_into_iter();
+
                                 let has_iter = has_iter | i;
                                 let _: ::quote::__private::HasIterator = has_iter;
+
                                 while true {
                                     let field_bytes = match field_bytes.next() {
                                         Some(_x) => ::quote::__private::RepInterp(_x),
                                         None => break,
                                     };
+
                                     let constructors = match constructors.next() {
                                         Some(_x) => ::quote::__private::RepInterp(_x),
                                         None => break,
                                     };
+
                                     ::quote::ToTokens::to_tokens(&field_bytes, &mut _s);
                                     ::quote::__private::push_fat_arrow(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "_serde");
@@ -12999,6 +14340,7 @@ mod de {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::ToTokens::to_tokens(&constructors, &mut _s);
                                             _s
                                         },
@@ -13006,6 +14348,7 @@ mod de {
                                     ::quote::__private::push_comma(&mut _s);
                                 }
                             };
+
                             ::quote::__private::push_underscore(&mut _s);
                             ::quote::__private::push_fat_arrow(&mut _s);
                             ::quote::__private::push_group(
@@ -13013,6 +14356,7 @@ mod de {
                                 ::quote::__private::Delimiter::Brace,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&bytes_to_str, &mut _s);
                                     ::quote::ToTokens::to_tokens(
                                         &value_as_bytes_content,
@@ -13032,6 +14376,7 @@ mod de {
             _s
         })
     }
+
     fn deserialize_struct_as_struct_visitor(
         struct_path: &TokenStream,
         params: &Parameters,
@@ -13041,6 +14386,7 @@ mod de {
         if !!cattrs.has_flatten() {
             ::core::panicking::panic("assertion failed: !cattrs.has_flatten()")
         }
+
         let field_names_idents: Vec<_> = fields
             .iter()
             .enumerate()
@@ -13053,10 +14399,13 @@ mod de {
                 )
             })
             .collect();
+
         let fields_stmt = {
             let field_names = field_names_idents.iter().map(|(name, _, _)| name);
+
             crate::fragment::Fragment::Block({
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "const");
                 ::quote::__private::push_ident(&mut _s, "FIELDS");
                 ::quote::__private::push_colon(&mut _s);
@@ -13067,6 +14416,7 @@ mod de {
                     ::quote::__private::Delimiter::Bracket,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_and(&mut _s);
                         ::quote::__private::push_lifetime(&mut _s, "\'static");
                         ::quote::__private::push_ident(&mut _s, "str");
@@ -13080,26 +14430,35 @@ mod de {
                     ::quote::__private::Delimiter::Bracket,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         {
                             use ::quote::__private::ext::*;
+
                             let mut _i = 0usize;
+
                             let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                             #[allow(unused_mut)]
                             let (mut field_names, i) = field_names.quote_into_iter();
+
                             let has_iter = has_iter | i;
                             let _: ::quote::__private::HasIterator = has_iter;
+
                             while true {
                                 let field_names = match field_names.next() {
                                     Some(_x) => ::quote::__private::RepInterp(_x),
                                     None => break,
                                 };
+
                                 if _i > 0 {
                                     ::quote::__private::push_comma(&mut _s);
                                 }
+
                                 _i += 1;
                                 ::quote::ToTokens::to_tokens(&field_names, &mut _s);
                             }
                         };
+
                         _s
                     },
                 );
@@ -13107,6 +14466,7 @@ mod de {
                 _s
             })
         };
+
         let field_visitor = deserialize_generated_identifier(
             &field_names_idents,
             cattrs,
@@ -13114,8 +14474,10 @@ mod de {
             None,
         );
         let visit_map = deserialize_map(struct_path, params, fields, cattrs);
+
         (field_visitor, Some(fields_stmt), visit_map)
     }
+
     fn deserialize_struct_as_map_visitor(
         struct_path: &TokenStream,
         params: &Parameters,
@@ -13143,8 +14505,10 @@ mod de {
             None,
         );
         let visit_map = deserialize_map(struct_path, params, fields, cattrs);
+
         (field_visitor, None, visit_map)
     }
+
     fn deserialize_map(
         struct_path: &TokenStream,
         params: &Parameters,
@@ -13163,8 +14527,10 @@ mod de {
             })
             .map(|(field, name)| {
                 let field_ty = field.ty;
+
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::__private::push_ident(&mut _s, "mut");
                     ::quote::ToTokens::to_tokens(&name, &mut _s);
@@ -13187,9 +14553,11 @@ mod de {
                     _s
                 }
             });
+
         let let_collect = if cattrs.has_flatten() {
             Some({
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "let");
                 ::quote::__private::push_ident(&mut _s, "mut");
                 ::quote::__private::push_ident(&mut _s, "__collect");
@@ -13212,6 +14580,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -13244,6 +14613,7 @@ mod de {
         } else {
             None
         };
+
         let value_arms = fields_names
             .iter()
             .filter(|&&(field, _)| {
@@ -13251,13 +14621,17 @@ mod de {
             })
             .map(|(field, name)| {
                 let deser_name = field.attrs.name().deserialize_name();
+
                 let visit = match field.attrs.deserialize_with() {
                     None => {
                         let field_ty = field.ty;
                         let span = field.original.span();
+
                         let func = {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             let _span: ::quote::__private::Span = span;
+
                             ::quote::__private::push_ident_spanned(
                                 &mut _s,
                                 _span,
@@ -13283,8 +14657,10 @@ mod de {
                             ::quote::__private::push_gt_spanned(&mut _s, _span);
                             _s
                         };
+
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "try");
                             ::quote::__private::push_bang(&mut _s);
                             ::quote::__private::push_group(
@@ -13292,12 +14668,14 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&func, &mut _s);
                                     ::quote::__private::push_group(
                                         &mut _s,
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_and(&mut _s);
                                             ::quote::__private::push_ident(&mut _s, "mut");
                                             ::quote::__private::push_ident(&mut _s, "__map");
@@ -13316,13 +14694,16 @@ mod de {
                             field.ty,
                             path,
                         );
+
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_group(
                                 &mut _s,
                                 ::quote::__private::Delimiter::Brace,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&wrapper, &mut _s);
                                     ::quote::__private::push_ident(&mut _s, "match");
                                     ::quote::__private::push_ident(&mut _s, "_serde");
@@ -13341,6 +14722,7 @@ mod de {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_and(&mut _s);
                                             ::quote::__private::push_ident(&mut _s, "mut");
                                             ::quote::__private::push_ident(&mut _s, "__map");
@@ -13352,6 +14734,7 @@ mod de {
                                         ::quote::__private::Delimiter::Brace,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "_serde");
                                             ::quote::__private::push_colon2(&mut _s);
                                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -13362,6 +14745,7 @@ mod de {
                                                 ::quote::__private::Delimiter::Parenthesis,
                                                 {
                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                     ::quote::__private::push_ident(&mut _s, "__wrapper");
                                                     _s
                                                 },
@@ -13381,6 +14765,7 @@ mod de {
                                                 ::quote::__private::Delimiter::Parenthesis,
                                                 {
                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                     ::quote::__private::push_ident(&mut _s, "__err");
                                                     _s
                                                 },
@@ -13391,6 +14776,7 @@ mod de {
                                                 ::quote::__private::Delimiter::Brace,
                                                 {
                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                     ::quote::__private::push_ident(&mut _s, "return");
                                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                                     ::quote::__private::push_colon2(&mut _s);
@@ -13402,6 +14788,7 @@ mod de {
                                                         ::quote::__private::Delimiter::Parenthesis,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::push_ident(&mut _s, "__err");
                                                             _s
                                                         },
@@ -13420,8 +14807,10 @@ mod de {
                         }
                     }
                 };
+
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__Field");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::ToTokens::to_tokens(&name, &mut _s);
@@ -13431,6 +14820,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "if");
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
@@ -13444,6 +14834,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_and(&mut _s);
                                     ::quote::ToTokens::to_tokens(&name, &mut _s);
                                     _s
@@ -13454,6 +14845,7 @@ mod de {
                                 ::quote::__private::Delimiter::Brace,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "return");
                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                     ::quote::__private::push_colon2(&mut _s);
@@ -13465,6 +14857,7 @@ mod de {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_lt(&mut _s);
                                             ::quote::__private::push_ident(&mut _s, "__A");
                                             ::quote::__private::push_colon2(&mut _s);
@@ -13483,6 +14876,7 @@ mod de {
                                                 ::quote::__private::Delimiter::Parenthesis,
                                                 {
                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                     ::quote::ToTokens::to_tokens(&deser_name, &mut _s);
                                                     _s
                                                 },
@@ -13506,6 +14900,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&visit, &mut _s);
                                     _s
                                 },
@@ -13517,9 +14912,11 @@ mod de {
                     _s
                 }
             });
+
         let ignored_arm = if cattrs.has_flatten() {
             Some({
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "__Field");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__other");
@@ -13528,6 +14925,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "__name");
                         _s
                     },
@@ -13538,6 +14936,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "__collect");
                         ::quote::__private::push_dot(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "push");
@@ -13546,6 +14945,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "_serde");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -13556,11 +14956,13 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_group(
                                             &mut _s,
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "__name");
                                                 ::quote::__private::push_comma(&mut _s);
                                                 ::quote::__private::push_ident(&mut _s, "try");
@@ -13570,6 +14972,7 @@ mod de {
                                                     ::quote::__private::Delimiter::Parenthesis,
                                                     {
                                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                                         ::quote::__private::push_colon2(&mut _s);
                                                         ::quote::__private::push_ident(&mut _s, "de");
@@ -13582,6 +14985,7 @@ mod de {
                                                             ::quote::__private::Delimiter::Parenthesis,
                                                             {
                                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                                 ::quote::__private::push_and(&mut _s);
                                                                 ::quote::__private::push_ident(&mut _s, "mut");
                                                                 ::quote::__private::push_ident(&mut _s, "__map");
@@ -13611,6 +15015,7 @@ mod de {
         } else {
             Some({
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_underscore(&mut _s);
                 ::quote::__private::push_fat_arrow(&mut _s);
                 ::quote::__private::push_group(
@@ -13618,6 +15023,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "let");
                         ::quote::__private::push_underscore(&mut _s);
                         ::quote::__private::push_eq(&mut _s);
@@ -13628,6 +15034,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "_serde");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "de");
@@ -13648,6 +15055,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_and(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "mut");
                                         ::quote::__private::push_ident(&mut _s, "__map");
@@ -13664,10 +15072,13 @@ mod de {
                 _s
             })
         };
+
         let all_skipped = fields.iter().all(|field| field.attrs.skip_deserializing());
+
         let match_keys = if cattrs.deny_unknown_fields() && all_skipped {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -13680,6 +15091,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "try");
                         ::quote::__private::push_bang(&mut _s);
                         ::quote::__private::push_group(
@@ -13687,6 +15099,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "_serde");
                                 ::quote::__private::push_colon2(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "de");
@@ -13703,6 +15116,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_and(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "mut");
                                         ::quote::__private::push_ident(&mut _s, "__map");
@@ -13732,6 +15146,7 @@ mod de {
         } else {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "while");
                 ::quote::__private::push_ident(&mut _s, "let");
                 ::quote::__private::push_ident(&mut _s, "_serde");
@@ -13744,6 +15159,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "__key");
                         _s
                     },
@@ -13756,6 +15172,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "de");
@@ -13772,6 +15189,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_and(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "mut");
                                 ::quote::__private::push_ident(&mut _s, "__map");
@@ -13786,6 +15204,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "match");
                         ::quote::__private::push_ident(&mut _s, "__key");
                         ::quote::__private::push_group(
@@ -13793,21 +15212,28 @@ mod de {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 {
                                     use ::quote::__private::ext::*;
+
                                     let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                     #[allow(unused_mut)]
                                     let (mut value_arms, i) = value_arms.quote_into_iter();
+
                                     let has_iter = has_iter | i;
                                     let _: ::quote::__private::HasIterator = has_iter;
+
                                     while true {
                                         let value_arms = match value_arms.next() {
                                             Some(_x) => ::quote::__private::RepInterp(_x),
                                             None => break,
                                         };
+
                                         ::quote::ToTokens::to_tokens(&value_arms, &mut _s);
                                     }
                                 };
+
                                 ::quote::ToTokens::to_tokens(&ignored_arm, &mut _s);
                                 _s
                             },
@@ -13818,6 +15244,7 @@ mod de {
                 _s
             }
         };
+
         let extract_values = fields_names
             .iter()
             .filter(|&&(field, _)| {
@@ -13825,8 +15252,10 @@ mod de {
             })
             .map(|(field, name)| {
                 let missing_expr = Match(expr_is_missing(field, cattrs));
+
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::ToTokens::to_tokens(&name, &mut _s);
                     ::quote::__private::push_eq(&mut _s);
@@ -13837,6 +15266,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -13847,6 +15277,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&name, &mut _s);
                                     _s
                                 },
@@ -13875,12 +15306,16 @@ mod de {
             })
             .map(|(field, name)| {
                 let field_ty = field.ty;
+
                 let func = match field.attrs.deserialize_with() {
                     None => {
                         let span = field.original.span();
+
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             let _span: ::quote::__private::Span = span;
+
                             ::quote::__private::push_ident_spanned(
                                 &mut _s,
                                 _span,
@@ -13905,12 +15340,15 @@ mod de {
                     }
                     Some(path) => {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&path, &mut _s);
                         _s
                     }
                 };
+
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::ToTokens::to_tokens(&name, &mut _s);
                     ::quote::__private::push_colon(&mut _s);
@@ -13923,12 +15361,14 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&func, &mut _s);
                             ::quote::__private::push_group(
                                 &mut _s,
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                     ::quote::__private::push_colon2(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "__private");
@@ -13944,6 +15384,7 @@ mod de {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_and(&mut _s);
                                             ::quote::__private::push_ident(&mut _s, "mut");
                                             ::quote::__private::push_ident(&mut _s, "__collect");
@@ -13966,11 +15407,13 @@ mod de {
                     _s
                 }
             });
+
         let collected_deny_unknown_fields = if cattrs.has_flatten()
             && cattrs.deny_unknown_fields()
         {
             Some({
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "if");
                 ::quote::__private::push_ident(&mut _s, "let");
                 ::quote::__private::push_ident(&mut _s, "_serde");
@@ -13983,6 +15426,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -13993,11 +15437,13 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_group(
                                     &mut _s,
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "__key");
                                         ::quote::__private::push_comma(&mut _s);
                                         ::quote::__private::push_underscore(&mut _s);
@@ -14026,6 +15472,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -14048,6 +15495,7 @@ mod de {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "if");
                         ::quote::__private::push_ident(&mut _s, "let");
                         ::quote::__private::push_ident(&mut _s, "_serde");
@@ -14060,6 +15508,7 @@ mod de {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__key");
                                 _s
                             },
@@ -14078,6 +15527,7 @@ mod de {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "return");
                                 ::quote::__private::push_ident(&mut _s, "_serde");
                                 ::quote::__private::push_colon2(&mut _s);
@@ -14089,6 +15539,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "de");
@@ -14101,6 +15552,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "format_args");
                                                 ::quote::__private::push_bang(&mut _s);
                                                 ::quote::__private::push_group(
@@ -14108,6 +15560,7 @@ mod de {
                                                     ::quote::__private::Delimiter::Parenthesis,
                                                     {
                                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                                         ::quote::__private::parse(
                                                             &mut _s,
                                                             "\"unknown field `{}`\"",
@@ -14134,6 +15587,7 @@ mod de {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "return");
                                 ::quote::__private::push_ident(&mut _s, "_serde");
                                 ::quote::__private::push_colon2(&mut _s);
@@ -14145,6 +15599,7 @@ mod de {
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "_serde");
                                         ::quote::__private::push_colon2(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "de");
@@ -14157,6 +15612,7 @@ mod de {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "format_args");
                                                 ::quote::__private::push_bang(&mut _s);
                                                 ::quote::__private::push_group(
@@ -14164,6 +15620,7 @@ mod de {
                                                     ::quote::__private::Delimiter::Parenthesis,
                                                     {
                                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                                         ::quote::__private::parse(
                                                             &mut _s,
                                                             "\"unexpected map key\"",
@@ -14189,14 +15646,18 @@ mod de {
         } else {
             None
         };
+
         let result = fields_names
             .iter()
             .map(|(field, name)| {
                 let member = &field.member;
+
                 if field.attrs.skip_deserializing() {
                     let value = Expr(expr_is_missing(field, cattrs));
+
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&member, &mut _s);
                         ::quote::__private::push_colon(&mut _s);
                         ::quote::ToTokens::to_tokens(&value, &mut _s);
@@ -14205,6 +15666,7 @@ mod de {
                 } else {
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&member, &mut _s);
                         ::quote::__private::push_colon(&mut _s);
                         ::quote::ToTokens::to_tokens(&name, &mut _s);
@@ -14212,10 +15674,12 @@ mod de {
                     }
                 }
             });
+
         let let_default = match cattrs.default() {
             attr::Default::Default => {
                 Some({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::__private::push_ident(&mut _s, "__default");
                     ::quote::__private::push_colon(&mut _s);
@@ -14242,6 +15706,7 @@ mod de {
             attr::Default::Path(path) => {
                 Some({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::__private::push_ident(&mut _s, "__default");
                     ::quote::__private::push_colon(&mut _s);
@@ -14261,43 +15726,57 @@ mod de {
             }
             attr::Default::None => None,
         };
+
         let mut result = {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::ToTokens::to_tokens(&struct_path, &mut _s);
             ::quote::__private::push_group(
                 &mut _s,
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     {
                         use ::quote::__private::ext::*;
+
                         let mut _i = 0usize;
+
                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                         #[allow(unused_mut)]
                         let (mut result, i) = result.quote_into_iter();
+
                         let has_iter = has_iter | i;
                         let _: ::quote::__private::HasIterator = has_iter;
+
                         while true {
                             let result = match result.next() {
                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                 None => break,
                             };
+
                             if _i > 0 {
                                 ::quote::__private::push_comma(&mut _s);
                             }
+
                             _i += 1;
                             ::quote::ToTokens::to_tokens(&result, &mut _s);
                         }
                     };
+
                     _s
                 },
             );
             _s
         };
+
         if params.has_getter {
             let this = &params.this;
+
             result = {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -14314,6 +15793,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&result, &mut _s);
                         _s
                     },
@@ -14321,56 +15801,77 @@ mod de {
                 _s
             };
         }
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             {
                 use ::quote::__private::ext::*;
+
                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                 #[allow(unused_mut)]
                 let (mut let_values, i) = let_values.quote_into_iter();
+
                 let has_iter = has_iter | i;
                 let _: ::quote::__private::HasIterator = has_iter;
+
                 while true {
                     let let_values = match let_values.next() {
                         Some(_x) => ::quote::__private::RepInterp(_x),
                         None => break,
                     };
+
                     ::quote::ToTokens::to_tokens(&let_values, &mut _s);
                 }
             };
+
             ::quote::ToTokens::to_tokens(&let_collect, &mut _s);
             ::quote::ToTokens::to_tokens(&match_keys, &mut _s);
             ::quote::ToTokens::to_tokens(&let_default, &mut _s);
+
             {
                 use ::quote::__private::ext::*;
+
                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                 #[allow(unused_mut)]
                 let (mut extract_values, i) = extract_values.quote_into_iter();
+
                 let has_iter = has_iter | i;
                 let _: ::quote::__private::HasIterator = has_iter;
+
                 while true {
                     let extract_values = match extract_values.next() {
                         Some(_x) => ::quote::__private::RepInterp(_x),
                         None => break,
                     };
+
                     ::quote::ToTokens::to_tokens(&extract_values, &mut _s);
                 }
             };
+
             {
                 use ::quote::__private::ext::*;
+
                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                 #[allow(unused_mut)]
                 let (mut extract_collected, i) = extract_collected.quote_into_iter();
+
                 let has_iter = has_iter | i;
                 let _: ::quote::__private::HasIterator = has_iter;
+
                 while true {
                     let extract_collected = match extract_collected.next() {
                         Some(_x) => ::quote::__private::RepInterp(_x),
                         None => break,
                     };
+
                     ::quote::ToTokens::to_tokens(&extract_collected, &mut _s);
                 }
             };
+
             ::quote::ToTokens::to_tokens(&collected_deny_unknown_fields, &mut _s);
             ::quote::__private::push_ident(&mut _s, "_serde");
             ::quote::__private::push_colon2(&mut _s);
@@ -14382,6 +15883,7 @@ mod de {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&result, &mut _s);
                     _s
                 },
@@ -14389,6 +15891,7 @@ mod de {
             _s
         })
     }
+
     fn field_i(i: usize) -> Ident {
         Ident::new(
             &{
@@ -14398,11 +15901,13 @@ mod de {
                         &[::core::fmt::ArgumentV1::new_display(&i)],
                     ),
                 );
+
                 res
             },
             Span::call_site(),
         )
     }
+
     fn wrap_deserialize_with(
         params: &Parameters,
         value_ty: &TokenStream,
@@ -14413,8 +15918,10 @@ mod de {
             params,
         );
         let delife = params.borrowed.de_lifetime();
+
         let wrapper = {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "struct");
             ::quote::__private::push_ident(&mut _s, "__DeserializeWith");
             ::quote::ToTokens::to_tokens(&de_impl_generics, &mut _s);
@@ -14424,6 +15931,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "value");
                     ::quote::__private::push_colon(&mut _s);
                     ::quote::ToTokens::to_tokens(&value_ty, &mut _s);
@@ -14477,6 +15985,7 @@ mod de {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "fn");
                     ::quote::__private::push_ident(&mut _s, "deserialize");
                     ::quote::__private::push_lt(&mut _s);
@@ -14487,6 +15996,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__deserializer");
                             ::quote::__private::push_colon(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__D");
@@ -14521,6 +16031,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -14531,6 +16042,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(
                                         &mut _s,
                                         "__DeserializeWith",
@@ -14540,6 +16052,7 @@ mod de {
                                         ::quote::__private::Delimiter::Brace,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "value");
                                             ::quote::__private::push_colon(&mut _s);
                                             ::quote::__private::push_ident(&mut _s, "try");
@@ -14549,12 +16062,14 @@ mod de {
                                                 ::quote::__private::Delimiter::Parenthesis,
                                                 {
                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                     ::quote::ToTokens::to_tokens(&deserialize_with, &mut _s);
                                                     ::quote::__private::push_group(
                                                         &mut _s,
                                                         ::quote::__private::Delimiter::Parenthesis,
                                                         {
                                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                                             ::quote::__private::push_ident(&mut _s, "__deserializer");
                                                             _s
                                                         },
@@ -14593,14 +16108,18 @@ mod de {
             );
             _s
         };
+
         let wrapper_ty = {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "__DeserializeWith");
             ::quote::ToTokens::to_tokens(&de_ty_generics, &mut _s);
             _s
         };
+
         (wrapper, wrapper_ty)
     }
+
     fn wrap_deserialize_field_with(
         params: &Parameters,
         field_ty: &syn::Type,
@@ -14610,12 +16129,14 @@ mod de {
             params,
             &{
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::ToTokens::to_tokens(&field_ty, &mut _s);
                 _s
             },
             deserialize_with,
         )
     }
+
     fn wrap_deserialize_variant_with(
         params: &Parameters,
         variant: &Variant,
@@ -14626,31 +16147,41 @@ mod de {
             params,
             &{
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_group(
                     &mut _s,
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         {
                             use ::quote::__private::ext::*;
+
                             let mut _i = 0usize;
+
                             let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                             #[allow(unused_mut)]
                             let (mut field_tys, i) = field_tys.quote_into_iter();
+
                             let has_iter = has_iter | i;
                             let _: ::quote::__private::HasIterator = has_iter;
+
                             while true {
                                 let field_tys = match field_tys.next() {
                                     Some(_x) => ::quote::__private::RepInterp(_x),
                                     None => break,
                                 };
+
                                 if _i > 0 {
                                     ::quote::__private::push_comma(&mut _s);
                                 }
+
                                 _i += 1;
                                 ::quote::ToTokens::to_tokens(&field_tys, &mut _s);
                             }
                         };
+
                         _s
                     },
                 );
@@ -14659,8 +16190,10 @@ mod de {
             deserialize_with,
         );
         let unwrap_fn = unwrap_to_variant_closure(params, variant, true);
+
         (wrapper, wrapper_ty, unwrap_fn)
     }
+
     fn unwrap_to_variant_closure(
         params: &Parameters,
         variant: &Variant,
@@ -14668,15 +16201,18 @@ mod de {
     ) -> TokenStream {
         let this = &params.this;
         let variant_ident = &variant.ident;
+
         let (arg, wrapper) = if with_wrapper {
             (
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__wrap");
                     _s
                 },
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__wrap");
                     ::quote::__private::push_dot(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "value");
@@ -14685,9 +16221,11 @@ mod de {
             )
         } else {
             let field_tys = variant.fields.iter().map(|field| field.ty);
+
             (
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__wrap");
                     ::quote::__private::push_colon(&mut _s);
                     ::quote::__private::push_group(
@@ -14695,26 +16233,35 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             {
                                 use ::quote::__private::ext::*;
+
                                 let mut _i = 0usize;
+
                                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                 #[allow(unused_mut)]
                                 let (mut field_tys, i) = field_tys.quote_into_iter();
+
                                 let has_iter = has_iter | i;
                                 let _: ::quote::__private::HasIterator = has_iter;
+
                                 while true {
                                     let field_tys = match field_tys.next() {
                                         Some(_x) => ::quote::__private::RepInterp(_x),
                                         None => break,
                                     };
+
                                     if _i > 0 {
                                         ::quote::__private::push_comma(&mut _s);
                                     }
+
                                     _i += 1;
                                     ::quote::ToTokens::to_tokens(&field_tys, &mut _s);
                                 }
                             };
+
                             _s
                         },
                     );
@@ -14722,11 +16269,13 @@ mod de {
                 },
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__wrap");
                     _s
                 },
             )
         };
+
         let field_access = (0..variant.fields.len())
             .map(|n| {
                 Member::Unnamed(Index {
@@ -14734,11 +16283,14 @@ mod de {
                     span: Span::call_site(),
                 })
             });
+
         match variant.style {
             Style::Struct if variant.fields.len() == 1 => {
                 let member = &variant.fields[0].member;
+
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_or(&mut _s);
                     ::quote::ToTokens::to_tokens(&arg, &mut _s);
                     ::quote::__private::push_or(&mut _s);
@@ -14750,6 +16302,7 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&member, &mut _s);
                             ::quote::__private::push_colon(&mut _s);
                             ::quote::ToTokens::to_tokens(&wrapper, &mut _s);
@@ -14761,8 +16314,10 @@ mod de {
             }
             Style::Struct => {
                 let members = variant.fields.iter().map(|field| &field.member);
+
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_or(&mut _s);
                     ::quote::ToTokens::to_tokens(&arg, &mut _s);
                     ::quote::__private::push_or(&mut _s);
@@ -14774,36 +16329,50 @@ mod de {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             {
                                 use ::quote::__private::ext::*;
+
                                 let mut _i = 0usize;
+
                                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                 #[allow(unused_mut)]
                                 let (mut members, i) = members.quote_into_iter();
+
                                 let has_iter = has_iter | i;
+
                                 #[allow(unused_mut)]
                                 let (mut wrapper, i) = wrapper.quote_into_iter();
+
                                 let has_iter = has_iter | i;
+
                                 #[allow(unused_mut)]
                                 let (mut field_access, i) = field_access.quote_into_iter();
+
                                 let has_iter = has_iter | i;
                                 let _: ::quote::__private::HasIterator = has_iter;
+
                                 while true {
                                     let members = match members.next() {
                                         Some(_x) => ::quote::__private::RepInterp(_x),
                                         None => break,
                                     };
+
                                     let wrapper = match wrapper.next() {
                                         Some(_x) => ::quote::__private::RepInterp(_x),
                                         None => break,
                                     };
+
                                     let field_access = match field_access.next() {
                                         Some(_x) => ::quote::__private::RepInterp(_x),
                                         None => break,
                                     };
+
                                     if _i > 0 {
                                         ::quote::__private::push_comma(&mut _s);
                                     }
+
                                     _i += 1;
                                     ::quote::ToTokens::to_tokens(&members, &mut _s);
                                     ::quote::__private::push_colon(&mut _s);
@@ -14812,6 +16381,7 @@ mod de {
                                     ::quote::ToTokens::to_tokens(&field_access, &mut _s);
                                 }
                             };
+
                             _s
                         },
                     );
@@ -14820,6 +16390,7 @@ mod de {
             }
             Style::Tuple => {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_or(&mut _s);
                 ::quote::ToTokens::to_tokens(&arg, &mut _s);
                 ::quote::__private::push_or(&mut _s);
@@ -14831,35 +16402,47 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         {
                             use ::quote::__private::ext::*;
+
                             let mut _i = 0usize;
+
                             let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                             #[allow(unused_mut)]
                             let (mut wrapper, i) = wrapper.quote_into_iter();
+
                             let has_iter = has_iter | i;
+
                             #[allow(unused_mut)]
                             let (mut field_access, i) = field_access.quote_into_iter();
+
                             let has_iter = has_iter | i;
                             let _: ::quote::__private::HasIterator = has_iter;
+
                             while true {
                                 let wrapper = match wrapper.next() {
                                     Some(_x) => ::quote::__private::RepInterp(_x),
                                     None => break,
                                 };
+
                                 let field_access = match field_access.next() {
                                     Some(_x) => ::quote::__private::RepInterp(_x),
                                     None => break,
                                 };
+
                                 if _i > 0 {
                                     ::quote::__private::push_comma(&mut _s);
                                 }
+
                                 _i += 1;
                                 ::quote::ToTokens::to_tokens(&wrapper, &mut _s);
                                 ::quote::__private::push_dot(&mut _s);
                                 ::quote::ToTokens::to_tokens(&field_access, &mut _s);
                             }
                         };
+
                         _s
                     },
                 );
@@ -14867,6 +16450,7 @@ mod de {
             }
             Style::Newtype => {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_or(&mut _s);
                 ::quote::ToTokens::to_tokens(&arg, &mut _s);
                 ::quote::__private::push_or(&mut _s);
@@ -14878,6 +16462,7 @@ mod de {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&wrapper, &mut _s);
                         _s
                     },
@@ -14886,6 +16471,7 @@ mod de {
             }
             Style::Unit => {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_or(&mut _s);
                 ::quote::ToTokens::to_tokens(&arg, &mut _s);
                 ::quote::__private::push_or(&mut _s);
@@ -14896,13 +16482,17 @@ mod de {
             }
         }
     }
+
     fn expr_is_missing(field: &Field, cattrs: &attr::Container) -> Fragment {
         match field.attrs.default() {
             attr::Default::Default => {
                 let span = field.original.span();
+
                 let func = {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     let _span: ::quote::__private::Span = span;
+
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
                     ::quote::__private::push_colon2_spanned(&mut _s, _span);
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "__private");
@@ -14912,8 +16502,10 @@ mod de {
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "default");
                     _s
                 };
+
                 return crate::fragment::Fragment::Expr({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&func, &mut _s);
                     ::quote::__private::push_group(
                         &mut _s,
@@ -14926,6 +16518,7 @@ mod de {
             attr::Default::Path(path) => {
                 return crate::fragment::Fragment::Expr({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&path, &mut _s);
                     ::quote::__private::push_group(
                         &mut _s,
@@ -14937,11 +16530,14 @@ mod de {
             }
             attr::Default::None => {}
         }
+
         match *cattrs.default() {
             attr::Default::Default | attr::Default::Path(_) => {
                 let member = &field.member;
+
                 return crate::fragment::Fragment::Expr({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__default");
                     ::quote::__private::push_dot(&mut _s);
                     ::quote::ToTokens::to_tokens(&member, &mut _s);
@@ -14950,13 +16546,18 @@ mod de {
             }
             attr::Default::None => {}
         }
+
         let name = field.attrs.name().deserialize_name();
+
         match field.attrs.deserialize_with() {
             None => {
                 let span = field.original.span();
+
                 let func = {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     let _span: ::quote::__private::Span = span;
+
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
                     ::quote::__private::push_colon2_spanned(&mut _s, _span);
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "__private");
@@ -14970,8 +16571,10 @@ mod de {
                     );
                     _s
                 };
+
                 crate::fragment::Fragment::Expr({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "try");
                     ::quote::__private::push_bang(&mut _s);
                     ::quote::__private::push_group(
@@ -14979,12 +16582,14 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&func, &mut _s);
                             ::quote::__private::push_group(
                                 &mut _s,
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&name, &mut _s);
                                     _s
                                 },
@@ -14998,6 +16603,7 @@ mod de {
             Some(_) => {
                 crate::fragment::Fragment::Expr({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "return");
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
@@ -15009,6 +16615,7 @@ mod de {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_lt(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__A");
                             ::quote::__private::push_colon2(&mut _s);
@@ -15027,6 +16634,7 @@ mod de {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&name, &mut _s);
                                     _s
                                 },
@@ -15039,30 +16647,39 @@ mod de {
             }
         }
     }
+
     fn effective_style(variant: &Variant) -> Style {
         match variant.style {
             Style::Newtype if variant.fields[0].attrs.skip_deserializing() => Style::Unit,
             other => other,
         }
     }
+
     struct DeImplGenerics<'a>(&'a Parameters);
+
     impl<'a> ToTokens for DeImplGenerics<'a> {
         fn to_tokens(&self, tokens: &mut TokenStream) {
             let mut generics = self.0.generics.clone();
+
             if let Some(de_lifetime) = self.0.borrowed.de_lifetime_def() {
                 generics.params = Some(syn::GenericParam::Lifetime(de_lifetime))
                     .into_iter()
                     .chain(generics.params)
                     .collect();
             }
+
             let (impl_generics, _, _) = generics.split_for_impl();
+
             impl_generics.to_tokens(tokens);
         }
     }
+
     struct DeTypeGenerics<'a>(&'a Parameters);
+
     impl<'a> ToTokens for DeTypeGenerics<'a> {
         fn to_tokens(&self, tokens: &mut TokenStream) {
             let mut generics = self.0.generics.clone();
+
             if self.0.borrowed.de_lifetime_def().is_some() {
                 let def = syn::LifetimeDef {
                     attrs: Vec::new(),
@@ -15070,29 +16687,36 @@ mod de {
                     colon_token: None,
                     bounds: Punctuated::new(),
                 };
+
                 generics.params = Some(syn::GenericParam::Lifetime(def))
                     .into_iter()
                     .chain(generics.params)
                     .collect();
             }
+
             let (_, ty_generics, _) = generics.split_for_impl();
+
             ty_generics.to_tokens(tokens);
         }
     }
+
     fn split_with_de_lifetime(
         params: &Parameters,
     ) -> (DeImplGenerics, DeTypeGenerics, syn::TypeGenerics, Option<&syn::WhereClause>) {
         let de_impl_generics = DeImplGenerics(params);
         let de_ty_generics = DeTypeGenerics(params);
         let (_, ty_generics, where_clause) = params.generics.split_for_impl();
+
         (de_impl_generics, de_ty_generics, ty_generics, where_clause)
     }
 }
+
 mod dummy {
     use proc_macro2::{Ident, TokenStream};
     use quote::format_ident;
     use syn;
     use try;
+
     pub fn wrap_in_const(
         serde_path: Option<&syn::Path>,
         trait_: &str,
@@ -15100,12 +16724,14 @@ mod dummy {
         code: TokenStream,
     ) -> TokenStream {
         let try_replacement = try::replacement();
+
         let dummy_const = if true {
             ::quote::__private::mk_ident(
                 &{
                     let res = ::alloc::fmt::format(
                         ::core::fmt::Arguments::new_v1(&["_"], &[]),
                     );
+
                     res
                 },
                 ::std::option::Option::None,
@@ -15126,6 +16752,7 @@ mod dummy {
                                             ],
                                         ),
                                     );
+
                                     res
                                 },
                                 ::std::option::Option::None.or(arg.span()).or(arg.span()),
@@ -15135,9 +16762,11 @@ mod dummy {
                 }
             }
         };
+
         let use_serde = match serde_path {
             Some(path) => {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "use");
                 ::quote::ToTokens::to_tokens(&path, &mut _s);
                 ::quote::__private::push_ident(&mut _s, "as");
@@ -15147,18 +16776,21 @@ mod dummy {
             }
             None => {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_pound(&mut _s);
                 ::quote::__private::push_group(
                     &mut _s,
                     ::quote::__private::Delimiter::Bracket,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "allow");
                         ::quote::__private::push_group(
                             &mut _s,
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(
                                     &mut _s,
                                     "unused_extern_crates",
@@ -15185,20 +16817,24 @@ mod dummy {
                 _s
             }
         };
+
         {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_pound(&mut _s);
             ::quote::__private::push_group(
                 &mut _s,
                 ::quote::__private::Delimiter::Bracket,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "doc");
                     ::quote::__private::push_group(
                         &mut _s,
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "hidden");
                             _s
                         },
@@ -15212,12 +16848,14 @@ mod dummy {
                 ::quote::__private::Delimiter::Bracket,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "allow");
                     ::quote::__private::push_group(
                         &mut _s,
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(
                                 &mut _s,
                                 "non_upper_case_globals",
@@ -15249,6 +16887,7 @@ mod dummy {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&use_serde, &mut _s);
                     ::quote::ToTokens::to_tokens(&try_replacement, &mut _s);
                     ::quote::ToTokens::to_tokens(&code, &mut _s);
@@ -15259,25 +16898,31 @@ mod dummy {
             _s
         }
     }
+
     #[allow(deprecated)]
     fn unraw(ident: &Ident) -> String {
         ident.to_string().trim_left_matches("r#").to_owned()
     }
 }
+
 mod pretend {
     use proc_macro2::TokenStream;
     use quote::format_ident;
     use internals::ast::{Container, Data, Field, Style, Variant};
+
     pub fn pretend_used(cont: &Container, is_packed: bool) -> TokenStream {
         let pretend_fields = pretend_fields_used(cont, is_packed);
         let pretend_variants = pretend_variants_used(cont);
+
         {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::ToTokens::to_tokens(&pretend_fields, &mut _s);
             ::quote::ToTokens::to_tokens(&pretend_variants, &mut _s);
             _s
         }
     }
+
     fn pretend_fields_used(cont: &Container, is_packed: bool) -> TokenStream {
         match &cont.data {
             Data::Enum(variants) => pretend_fields_used_enum(cont, variants),
@@ -15291,6 +16936,7 @@ mod pretend {
             Data::Struct(_, _) => ::quote::__private::TokenStream::new(),
         }
     }
+
     fn pretend_fields_used_struct(cont: &Container, fields: &[Field]) -> TokenStream {
         let type_ident = &cont.ident;
         let (_, ty_generics, _) = cont.generics.split_for_impl();
@@ -15306,14 +16952,17 @@ mod pretend {
                                     &[::core::fmt::ArgumentV1::new_display(&arg)],
                                 ),
                             );
+
                             res
                         },
                         ::std::option::Option::None.or(arg.span()),
                     )
                 }
             });
+
         {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "match");
             ::quote::__private::push_ident(&mut _s, "_serde");
             ::quote::__private::push_colon2(&mut _s);
@@ -15331,6 +16980,7 @@ mod pretend {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "__private");
@@ -15341,41 +16991,54 @@ mod pretend {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&type_ident, &mut _s);
                             ::quote::__private::push_group(
                                 &mut _s,
                                 ::quote::__private::Delimiter::Brace,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     {
                                         use ::quote::__private::ext::*;
+
                                         let mut _i = 0usize;
+
                                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                         #[allow(unused_mut)]
                                         let (mut members, i) = members.quote_into_iter();
+
                                         let has_iter = has_iter | i;
+
                                         #[allow(unused_mut)]
                                         let (mut placeholders, i) = placeholders.quote_into_iter();
+
                                         let has_iter = has_iter | i;
                                         let _: ::quote::__private::HasIterator = has_iter;
+
                                         while true {
                                             let members = match members.next() {
                                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                                 None => break,
                                             };
+
                                             let placeholders = match placeholders.next() {
                                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                                 None => break,
                                             };
+
                                             if _i > 0 {
                                                 ::quote::__private::push_comma(&mut _s);
                                             }
+
                                             _i += 1;
                                             ::quote::ToTokens::to_tokens(&members, &mut _s);
                                             ::quote::__private::push_colon(&mut _s);
                                             ::quote::ToTokens::to_tokens(&placeholders, &mut _s);
                                         }
                                     };
+
                                     _s
                                 },
                             );
@@ -15401,6 +17064,7 @@ mod pretend {
             _s
         }
     }
+
     fn pretend_fields_used_struct_packed(
         cont: &Container,
         fields: &[Field],
@@ -15408,10 +17072,12 @@ mod pretend {
         let type_ident = &cont.ident;
         let (_, ty_generics, _) = cont.generics.split_for_impl();
         let members = fields.iter().map(|field| &field.member).collect::<Vec<_>>();
+
         #[cfg(ptr_addr_of)]
         {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "match");
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
@@ -15429,6 +17095,7 @@ mod pretend {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__private");
@@ -15439,6 +17106,7 @@ mod pretend {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__v");
                                 ::quote::__private::push_at(&mut _s);
                                 ::quote::ToTokens::to_tokens(&type_ident, &mut _s);
@@ -15447,28 +17115,37 @@ mod pretend {
                                     ::quote::__private::Delimiter::Brace,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         {
                                             use ::quote::__private::ext::*;
+
                                             let mut _i = 0usize;
+
                                             let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                             #[allow(unused_mut)]
                                             let (mut members, i) = members.quote_into_iter();
+
                                             let has_iter = has_iter | i;
                                             let _: ::quote::__private::HasIterator = has_iter;
+
                                             while true {
                                                 let members = match members.next() {
                                                     Some(_x) => ::quote::__private::RepInterp(_x),
                                                     None => break,
                                                 };
+
                                                 if _i > 0 {
                                                     ::quote::__private::push_comma(&mut _s);
                                                 }
+
                                                 _i += 1;
                                                 ::quote::ToTokens::to_tokens(&members, &mut _s);
                                                 ::quote::__private::push_colon(&mut _s);
                                                 ::quote::__private::push_underscore(&mut _s);
                                             }
                                         };
+
                                         _s
                                     },
                                 );
@@ -15481,18 +17158,24 @@ mod pretend {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 {
                                     use ::quote::__private::ext::*;
+
                                     let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                     #[allow(unused_mut)]
                                     let (mut members, i) = members.quote_into_iter();
+
                                     let has_iter = has_iter | i;
                                     let _: ::quote::__private::HasIterator = has_iter;
+
                                     while true {
                                         let members = match members.next() {
                                             Some(_x) => ::quote::__private::RepInterp(_x),
                                             None => break,
                                         };
+
                                         ::quote::__private::push_ident(&mut _s, "let");
                                         ::quote::__private::push_underscore(&mut _s);
                                         ::quote::__private::push_eq(&mut _s);
@@ -15509,6 +17192,7 @@ mod pretend {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_ident(&mut _s, "__v");
                                                 ::quote::__private::push_dot(&mut _s);
                                                 ::quote::ToTokens::to_tokens(&members, &mut _s);
@@ -15518,6 +17202,7 @@ mod pretend {
                                         ::quote::__private::push_semi(&mut _s);
                                     }
                                 };
+
                                 _s
                             },
                         );
@@ -15535,6 +17220,7 @@ mod pretend {
             }
         }
     }
+
     fn pretend_fields_used_enum(cont: &Container, variants: &[Variant]) -> TokenStream {
         let type_ident = &cont.ident;
         let (_, ty_generics, _) = cont.generics.split_for_impl();
@@ -15555,14 +17241,17 @@ mod pretend {
                                                 &[::core::fmt::ArgumentV1::new_display(&arg)],
                                             ),
                                         );
+
                                         res
                                     },
                                     ::std::option::Option::None.or(arg.span()),
                                 )
                             }
                         });
+
                     Some({
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&type_ident, &mut _s);
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::ToTokens::to_tokens(&variant_ident, &mut _s);
@@ -15571,35 +17260,47 @@ mod pretend {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 {
                                     use ::quote::__private::ext::*;
+
                                     let mut _i = 0usize;
+
                                     let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                     #[allow(unused_mut)]
                                     let (mut members, i) = members.quote_into_iter();
+
                                     let has_iter = has_iter | i;
+
                                     #[allow(unused_mut)]
                                     let (mut placeholders, i) = placeholders.quote_into_iter();
+
                                     let has_iter = has_iter | i;
                                     let _: ::quote::__private::HasIterator = has_iter;
+
                                     while true {
                                         let members = match members.next() {
                                             Some(_x) => ::quote::__private::RepInterp(_x),
                                             None => break,
                                         };
+
                                         let placeholders = match placeholders.next() {
                                             Some(_x) => ::quote::__private::RepInterp(_x),
                                             None => break,
                                         };
+
                                         if _i > 0 {
                                             ::quote::__private::push_comma(&mut _s);
                                         }
+
                                         _i += 1;
                                         ::quote::ToTokens::to_tokens(&members, &mut _s);
                                         ::quote::__private::push_colon(&mut _s);
                                         ::quote::ToTokens::to_tokens(&placeholders, &mut _s);
                                     }
                                 };
+
                                 _s
                             },
                         );
@@ -15609,8 +17310,10 @@ mod pretend {
                 _ => None,
             })
             .collect::<Vec<_>>();
+
         {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "match");
             ::quote::__private::push_ident(&mut _s, "_serde");
             ::quote::__private::push_colon2(&mut _s);
@@ -15628,18 +17331,24 @@ mod pretend {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     {
                         use ::quote::__private::ext::*;
+
                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                         #[allow(unused_mut)]
                         let (mut patterns, i) = patterns.quote_into_iter();
+
                         let has_iter = has_iter | i;
                         let _: ::quote::__private::HasIterator = has_iter;
+
                         while true {
                             let patterns = match patterns.next() {
                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                 None => break,
                             };
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -15650,6 +17359,7 @@ mod pretend {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&patterns, &mut _s);
                                     _s
                                 },
@@ -15662,6 +17372,7 @@ mod pretend {
                             );
                         }
                     };
+
                     ::quote::__private::push_underscore(&mut _s);
                     ::quote::__private::push_fat_arrow(&mut _s);
                     ::quote::__private::push_group(
@@ -15675,6 +17386,7 @@ mod pretend {
             _s
         }
     }
+
     fn pretend_variants_used(cont: &Container) -> TokenStream {
         let variants = match &cont.data {
             Data::Enum(variants) => variants,
@@ -15682,6 +17394,7 @@ mod pretend {
                 return ::quote::__private::TokenStream::new();
             }
         };
+
         let type_ident = &cont.ident;
         let (_, ty_generics, _) = cont.generics.split_for_impl();
         let turbofish = ty_generics.as_turbofish();
@@ -15700,6 +17413,7 @@ mod pretend {
                                             &[::core::fmt::ArgumentV1::new_display(&arg)],
                                         ),
                                     );
+
                                     res
                                 },
                                 ::std::option::Option::None.or(arg.span()),
@@ -15707,45 +17421,60 @@ mod pretend {
                         }
                     })
                     .collect::<Vec<_>>();
+
                 let pat = match variant.style {
                     Style::Struct => {
                         let members = variant.fields.iter().map(|field| &field.member);
+
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_group(
                                 &mut _s,
                                 ::quote::__private::Delimiter::Brace,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     {
                                         use ::quote::__private::ext::*;
+
                                         let mut _i = 0usize;
+
                                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                         #[allow(unused_mut)]
                                         let (mut members, i) = members.quote_into_iter();
+
                                         let has_iter = has_iter | i;
+
                                         #[allow(unused_mut)]
                                         let (mut placeholders, i) = placeholders.quote_into_iter();
+
                                         let has_iter = has_iter | i;
                                         let _: ::quote::__private::HasIterator = has_iter;
+
                                         while true {
                                             let members = match members.next() {
                                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                                 None => break,
                                             };
+
                                             let placeholders = match placeholders.next() {
                                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                                 None => break,
                                             };
+
                                             if _i > 0 {
                                                 ::quote::__private::push_comma(&mut _s);
                                             }
+
                                             _i += 1;
                                             ::quote::ToTokens::to_tokens(&members, &mut _s);
                                             ::quote::__private::push_colon(&mut _s);
                                             ::quote::ToTokens::to_tokens(&placeholders, &mut _s);
                                         }
                                     };
+
                                     _s
                                 },
                             );
@@ -15754,31 +17483,41 @@ mod pretend {
                     }
                     Style::Tuple | Style::Newtype => {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_group(
                             &mut _s,
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 {
                                     use ::quote::__private::ext::*;
+
                                     let mut _i = 0usize;
+
                                     let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                     #[allow(unused_mut)]
                                     let (mut placeholders, i) = placeholders.quote_into_iter();
+
                                     let has_iter = has_iter | i;
                                     let _: ::quote::__private::HasIterator = has_iter;
+
                                     while true {
                                         let placeholders = match placeholders.next() {
                                             Some(_x) => ::quote::__private::RepInterp(_x),
                                             None => break,
                                         };
+
                                         if _i > 0 {
                                             ::quote::__private::push_comma(&mut _s);
                                         }
+
                                         _i += 1;
                                         ::quote::ToTokens::to_tokens(&placeholders, &mut _s);
                                     }
                                 };
+
                                 _s
                             },
                         );
@@ -15786,8 +17525,10 @@ mod pretend {
                     }
                     Style::Unit => ::quote::__private::TokenStream::new(),
                 };
+
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "match");
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
@@ -15799,6 +17540,7 @@ mod pretend {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -15809,27 +17551,35 @@ mod pretend {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_group(
                                         &mut _s,
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             {
                                                 use ::quote::__private::ext::*;
+
                                                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                                 #[allow(unused_mut)]
                                                 let (mut placeholders, i) = placeholders.quote_into_iter();
+
                                                 let has_iter = has_iter | i;
                                                 let _: ::quote::__private::HasIterator = has_iter;
+
                                                 while true {
                                                     let placeholders = match placeholders.next() {
                                                         Some(_x) => ::quote::__private::RepInterp(_x),
                                                         None => break,
                                                     };
+
                                                     ::quote::ToTokens::to_tokens(&placeholders, &mut _s);
                                                     ::quote::__private::push_comma(&mut _s);
                                                 }
                                             };
+
                                             _s
                                         },
                                     );
@@ -15842,6 +17592,7 @@ mod pretend {
                                 ::quote::__private::Delimiter::Brace,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "let");
                                     ::quote::__private::push_underscore(&mut _s);
                                     ::quote::__private::push_eq(&mut _s);
@@ -15867,27 +17618,36 @@ mod pretend {
                     _s
                 }
             });
+
         {
             let mut _s = ::quote::__private::TokenStream::new();
+
             {
                 use ::quote::__private::ext::*;
+
                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                 #[allow(unused_mut)]
                 let (mut cases, i) = cases.quote_into_iter();
+
                 let has_iter = has_iter | i;
                 let _: ::quote::__private::HasIterator = has_iter;
+
                 while true {
                     let cases = match cases.next() {
                         Some(_x) => ::quote::__private::RepInterp(_x),
                         None => break,
                     };
+
                     ::quote::ToTokens::to_tokens(&cases, &mut _s);
                 }
             };
+
             _s
         }
     }
 }
+
 mod ser {
     use proc_macro2::{Span, TokenStream};
     use syn::spanned::Spanned;
@@ -15898,17 +17658,22 @@ mod ser {
     use internals::ast::{Container, Data, Field, Style, Variant};
     use internals::{attr, replace_receiver, Ctxt, Derive};
     use pretend;
+
     pub fn expand_derive_serialize(
         input: &mut syn::DeriveInput,
     ) -> Result<TokenStream, Vec<syn::Error>> {
         replace_receiver(input);
+
         let ctxt = Ctxt::new();
+
         let cont = match Container::from_ast(&ctxt, input, Derive::Serialize) {
             Some(cont) => cont,
             None => return Err(ctxt.check().unwrap_err()),
         };
+
         precondition(&ctxt, &cont);
         ctxt.check()?;
+
         let ident = &cont.ident;
         let params = Parameters::new(&cont);
         let (impl_generics, ty_generics, where_clause) = params
@@ -15916,11 +17681,14 @@ mod ser {
             .split_for_impl();
         let body = Stmts(serialize_body(&cont, &params));
         let serde = cont.attrs.serde_path();
+
         let impl_block = if let Some(remote) = cont.attrs.remote() {
             let vis = &input.vis;
             let used = pretend::pretend_used(&cont, params.is_packed);
+
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "impl");
                 ::quote::ToTokens::to_tokens(&impl_generics, &mut _s);
                 ::quote::ToTokens::to_tokens(&ident, &mut _s);
@@ -15931,6 +17699,7 @@ mod ser {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&vis, &mut _s);
                         ::quote::__private::push_ident(&mut _s, "fn");
                         ::quote::__private::push_ident(&mut _s, "serialize");
@@ -15942,6 +17711,7 @@ mod ser {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "__self");
                                 ::quote::__private::push_colon(&mut _s);
                                 ::quote::__private::push_and(&mut _s);
@@ -15981,6 +17751,7 @@ mod ser {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&used, &mut _s);
                                 ::quote::ToTokens::to_tokens(&body, &mut _s);
                                 _s
@@ -15994,12 +17765,14 @@ mod ser {
         } else {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_pound(&mut _s);
                 ::quote::__private::push_group(
                     &mut _s,
                     ::quote::__private::Delimiter::Bracket,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "automatically_derived");
                         _s
                     },
@@ -16018,6 +17791,7 @@ mod ser {
                     ::quote::__private::Delimiter::Brace,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "fn");
                         ::quote::__private::push_ident(&mut _s, "serialize");
                         ::quote::__private::push_lt(&mut _s);
@@ -16028,6 +17802,7 @@ mod ser {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_and(&mut _s);
                                 ::quote::__private::push_ident(&mut _s, "self");
                                 ::quote::__private::push_comma(&mut _s);
@@ -16064,6 +17839,7 @@ mod ser {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&body, &mut _s);
                                 _s
                             },
@@ -16074,6 +17850,7 @@ mod ser {
                 _s
             }
         };
+
         Ok(
             dummy::wrap_in_const(
                 cont.attrs.custom_serde_path(),
@@ -16083,6 +17860,7 @@ mod ser {
             ),
         )
     }
+
     fn precondition(cx: &Ctxt, cont: &Container) {
         match cont.attrs.identifier() {
             attr::Identifier::No => {}
@@ -16100,6 +17878,7 @@ mod ser {
             }
         }
     }
+
     struct Parameters {
         self_var: Ident,
         this: syn::Path,
@@ -16107,20 +17886,25 @@ mod ser {
         is_remote: bool,
         is_packed: bool,
     }
+
     impl Parameters {
         fn new(cont: &Container) -> Self {
             let is_remote = cont.attrs.remote().is_some();
+
             let self_var = if is_remote {
                 Ident::new("__self", Span::call_site())
             } else {
                 Ident::new("self", Span::call_site())
             };
+
             let this = match cont.attrs.remote() {
                 Some(remote) => remote.clone(),
                 None => cont.ident.clone().into(),
             };
+
             let is_packed = cont.attrs.is_packed();
             let generics = build_generics(cont);
+
             Parameters {
                 self_var,
                 this,
@@ -16129,10 +17913,12 @@ mod ser {
                 is_packed,
             }
         }
+
         fn type_name(&self) -> String {
             self.this.segments.last().unwrap().ident.to_string()
         }
     }
+
     fn build_generics(cont: &Container) -> syn::Generics {
         let generics = bound::without_defaults(cont.generics);
         let generics = bound::with_where_predicates_from_fields(
@@ -16145,6 +17931,7 @@ mod ser {
             &generics,
             attr::Variant::ser_bound,
         );
+
         match cont.attrs.ser_bound() {
             Some(predicates) => bound::with_where_predicates(&generics, predicates),
             None => {
@@ -16154,6 +17941,7 @@ mod ser {
                     needs_serialize_bound,
                     &::syn::parse_quote::parse({
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "Serialize");
@@ -16163,6 +17951,7 @@ mod ser {
             }
         }
     }
+
     fn needs_serialize_bound(
         field: &attr::Field,
         variant: Option<&attr::Variant>,
@@ -16178,6 +17967,7 @@ mod ser {
                     },
                 )
     }
+
     fn serialize_body(cont: &Container, params: &Parameters) -> Fragment {
         if cont.attrs.transparent() {
             serialize_transparent(cont, params)
@@ -16199,6 +17989,7 @@ mod ser {
             }
         }
     }
+
     fn serialize_transparent(cont: &Container, params: &Parameters) -> Fragment {
         let fields = match &cont.data {
             Data::Struct(_, fields) => fields,
@@ -16206,20 +17997,26 @@ mod ser {
                 ::core::panicking::panic("internal error: entered unreachable code")
             }
         };
+
         let self_var = &params.self_var;
         let transparent_field = fields.iter().find(|f| f.attrs.transparent()).unwrap();
         let member = &transparent_field.member;
+
         let path = match transparent_field.attrs.serialize_with() {
             Some(path) => {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::ToTokens::to_tokens(&path, &mut _s);
                 _s
             }
             None => {
                 let span = transparent_field.original.span();
+
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     let _span: ::quote::__private::Span = span;
+
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
                     ::quote::__private::push_colon2_spanned(&mut _s, _span);
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "Serialize");
@@ -16229,14 +18026,17 @@ mod ser {
                 }
             }
         };
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::ToTokens::to_tokens(&path, &mut _s);
             ::quote::__private::push_group(
                 &mut _s,
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_and(&mut _s);
                     ::quote::ToTokens::to_tokens(&self_var, &mut _s);
                     ::quote::__private::push_dot(&mut _s);
@@ -16249,10 +18049,13 @@ mod ser {
             _s
         })
     }
+
     fn serialize_into(params: &Parameters, type_into: &syn::Type) -> Fragment {
         let self_var = &params.self_var;
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "_serde");
             ::quote::__private::push_colon2(&mut _s);
             ::quote::__private::push_ident(&mut _s, "Serialize");
@@ -16263,6 +18066,7 @@ mod ser {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_and(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
@@ -16280,6 +18084,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__private");
@@ -16292,6 +18097,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&self_var, &mut _s);
                                     _s
                                 },
@@ -16307,10 +18113,13 @@ mod ser {
             _s
         })
     }
+
     fn serialize_unit_struct(cattrs: &attr::Container) -> Fragment {
         let type_name = cattrs.name().serialize_name();
+
         crate::fragment::Fragment::Expr({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "_serde");
             ::quote::__private::push_colon2(&mut _s);
             ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -16321,6 +18130,7 @@ mod ser {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__serializer");
                     ::quote::__private::push_comma(&mut _s);
                     ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -16330,12 +18140,14 @@ mod ser {
             _s
         })
     }
+
     fn serialize_newtype_struct(
         params: &Parameters,
         field: &Field,
         cattrs: &attr::Container,
     ) -> Fragment {
         let type_name = cattrs.name().serialize_name();
+
         let mut field_expr = get_member(
             params,
             field,
@@ -16344,13 +18156,18 @@ mod ser {
                 span: Span::call_site(),
             }),
         );
+
         if let Some(path) = field.attrs.serialize_with() {
             field_expr = wrap_serialize_field_with(params, field.ty, path, &field_expr);
         }
+
         let span = field.original.span();
+
         let func = {
             let mut _s = ::quote::__private::TokenStream::new();
+
             let _span: ::quote::__private::Span = span;
+
             ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
             ::quote::__private::push_colon2_spanned(&mut _s, _span);
             ::quote::__private::push_ident_spanned(&mut _s, _span, "Serializer");
@@ -16362,14 +18179,17 @@ mod ser {
             );
             _s
         };
+
         crate::fragment::Fragment::Expr({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::ToTokens::to_tokens(&func, &mut _s);
             ::quote::__private::push_group(
                 &mut _s,
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__serializer");
                     ::quote::__private::push_comma(&mut _s);
                     ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -16381,6 +18201,7 @@ mod ser {
             _s
         })
     }
+
     fn serialize_tuple_struct(
         params: &Parameters,
         fields: &[Field],
@@ -16393,16 +18214,19 @@ mod ser {
             &TupleTrait::SerializeTupleStruct,
         );
         let type_name = cattrs.name().serialize_name();
+
         let mut serialized_fields = fields
             .iter()
             .enumerate()
             .filter(|(_, field)| !field.attrs.skip_serializing())
             .peekable();
+
         let let_mut = mut_if(serialized_fields.peek().is_some());
         let len = serialized_fields
             .map(|(i, field)| match field.attrs.skip_serializing_if() {
                 None => {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::parse(&mut _s, "1");
                     _s
                 }
@@ -16412,8 +18236,10 @@ mod ser {
                         span: Span::call_site(),
                     };
                     let field_expr = get_member(params, field, &Member::Unnamed(index));
+
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "if");
                         ::quote::ToTokens::to_tokens(&path, &mut _s);
                         ::quote::__private::push_group(
@@ -16421,6 +18247,7 @@ mod ser {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&field_expr, &mut _s);
                                 _s
                             },
@@ -16430,6 +18257,7 @@ mod ser {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::parse(&mut _s, "0");
                                 _s
                             },
@@ -16440,6 +18268,7 @@ mod ser {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::parse(&mut _s, "1");
                                 _s
                             },
@@ -16451,19 +18280,23 @@ mod ser {
             .fold(
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::parse(&mut _s, "0");
                     _s
                 },
                 |sum, expr| {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&sum, &mut _s);
                     ::quote::__private::push_add(&mut _s);
                     ::quote::ToTokens::to_tokens(&expr, &mut _s);
                     _s
                 },
             );
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "let");
             ::quote::ToTokens::to_tokens(&let_mut, &mut _s);
             ::quote::__private::push_ident(&mut _s, "__serde_state");
@@ -16475,6 +18308,7 @@ mod ser {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -16485,6 +18319,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__serializer");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -16497,21 +18332,28 @@ mod ser {
                 },
             );
             ::quote::__private::push_semi(&mut _s);
+
             {
                 use ::quote::__private::ext::*;
+
                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                 #[allow(unused_mut)]
                 let (mut serialize_stmts, i) = serialize_stmts.quote_into_iter();
+
                 let has_iter = has_iter | i;
                 let _: ::quote::__private::HasIterator = has_iter;
+
                 while true {
                     let serialize_stmts = match serialize_stmts.next() {
                         Some(_x) => ::quote::__private::RepInterp(_x),
                         None => break,
                     };
+
                     ::quote::ToTokens::to_tokens(&serialize_stmts, &mut _s);
                 }
             };
+
             ::quote::__private::push_ident(&mut _s, "_serde");
             ::quote::__private::push_colon2(&mut _s);
             ::quote::__private::push_ident(&mut _s, "ser");
@@ -16524,6 +18366,7 @@ mod ser {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__serde_state");
                     _s
                 },
@@ -16531,6 +18374,7 @@ mod ser {
             _s
         })
     }
+
     fn serialize_struct(
         params: &Parameters,
         fields: &[Field],
@@ -16541,12 +18385,14 @@ mod ser {
                 "assertion failed: fields.len() as u64 <= u64::from(u32::max_value())",
             )
         }
+
         if cattrs.has_flatten() {
             serialize_struct_as_map(params, fields, cattrs)
         } else {
             serialize_struct_as_struct(params, fields, cattrs)
         }
     }
+
     fn serialize_struct_tag_field(
         cattrs: &attr::Container,
         struct_trait: &StructTrait,
@@ -16555,8 +18401,10 @@ mod ser {
             attr::TagType::Internal { tag } => {
                 let type_name = cattrs.name().serialize_name();
                 let func = struct_trait.serialize_field(Span::call_site());
+
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "try");
                     ::quote::__private::push_bang(&mut _s);
                     ::quote::__private::push_group(
@@ -16564,12 +18412,14 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&func, &mut _s);
                             ::quote::__private::push_group(
                                 &mut _s,
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_and(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "mut");
                                     ::quote::__private::push_ident(&mut _s, "__serde_state");
@@ -16590,6 +18440,7 @@ mod ser {
             _ => ::quote::__private::TokenStream::new(),
         }
     }
+
     fn serialize_struct_as_struct(
         params: &Parameters,
         fields: &[Field],
@@ -16607,22 +18458,27 @@ mod ser {
             &StructTrait::SerializeStruct,
         );
         let tag_field_exists = !tag_field.is_empty();
+
         let mut serialized_fields = fields
             .iter()
             .filter(|&field| !field.attrs.skip_serializing())
             .peekable();
+
         let let_mut = mut_if(serialized_fields.peek().is_some() || tag_field_exists);
         let len = serialized_fields
             .map(|field| match field.attrs.skip_serializing_if() {
                 None => {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::parse(&mut _s, "1");
                     _s
                 }
                 Some(path) => {
                     let field_expr = get_member(params, field, &field.member);
+
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "if");
                         ::quote::ToTokens::to_tokens(&path, &mut _s);
                         ::quote::__private::push_group(
@@ -16630,6 +18486,7 @@ mod ser {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&field_expr, &mut _s);
                                 _s
                             },
@@ -16639,6 +18496,7 @@ mod ser {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::parse(&mut _s, "0");
                                 _s
                             },
@@ -16649,6 +18507,7 @@ mod ser {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::parse(&mut _s, "1");
                                 _s
                             },
@@ -16660,6 +18519,7 @@ mod ser {
             .fold(
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&tag_field_exists, &mut _s);
                     ::quote::__private::push_ident(&mut _s, "as");
                     ::quote::__private::push_ident(&mut _s, "usize");
@@ -16667,14 +18527,17 @@ mod ser {
                 },
                 |sum, expr| {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&sum, &mut _s);
                     ::quote::__private::push_add(&mut _s);
                     ::quote::ToTokens::to_tokens(&expr, &mut _s);
                     _s
                 },
             );
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "let");
             ::quote::ToTokens::to_tokens(&let_mut, &mut _s);
             ::quote::__private::push_ident(&mut _s, "__serde_state");
@@ -16686,6 +18549,7 @@ mod ser {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -16696,6 +18560,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__serializer");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -16709,21 +18574,28 @@ mod ser {
             );
             ::quote::__private::push_semi(&mut _s);
             ::quote::ToTokens::to_tokens(&tag_field, &mut _s);
+
             {
                 use ::quote::__private::ext::*;
+
                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                 #[allow(unused_mut)]
                 let (mut serialize_fields, i) = serialize_fields.quote_into_iter();
+
                 let has_iter = has_iter | i;
                 let _: ::quote::__private::HasIterator = has_iter;
+
                 while true {
                     let serialize_fields = match serialize_fields.next() {
                         Some(_x) => ::quote::__private::RepInterp(_x),
                         None => break,
                     };
+
                     ::quote::ToTokens::to_tokens(&serialize_fields, &mut _s);
                 }
             };
+
             ::quote::__private::push_ident(&mut _s, "_serde");
             ::quote::__private::push_colon2(&mut _s);
             ::quote::__private::push_ident(&mut _s, "ser");
@@ -16736,6 +18608,7 @@ mod ser {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__serde_state");
                     _s
                 },
@@ -16743,6 +18616,7 @@ mod ser {
             _s
         })
     }
+
     fn serialize_struct_as_map(
         params: &Parameters,
         fields: &[Field],
@@ -16756,14 +18630,18 @@ mod ser {
         );
         let tag_field = serialize_struct_tag_field(cattrs, &StructTrait::SerializeMap);
         let tag_field_exists = !tag_field.is_empty();
+
         let mut serialized_fields = fields
             .iter()
             .filter(|&field| !field.attrs.skip_serializing())
             .peekable();
+
         let let_mut = mut_if(serialized_fields.peek().is_some() || tag_field_exists);
+
         let len = if cattrs.has_flatten() {
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -16776,13 +18654,16 @@ mod ser {
                 .map(|field| match field.attrs.skip_serializing_if() {
                     None => {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::parse(&mut _s, "1");
                         _s
                     }
                     Some(path) => {
                         let field_expr = get_member(params, field, &field.member);
+
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "if");
                             ::quote::ToTokens::to_tokens(&path, &mut _s);
                             ::quote::__private::push_group(
@@ -16790,6 +18671,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&field_expr, &mut _s);
                                     _s
                                 },
@@ -16799,6 +18681,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Brace,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::parse(&mut _s, "0");
                                     _s
                                 },
@@ -16809,6 +18692,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Brace,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::parse(&mut _s, "1");
                                     _s
                                 },
@@ -16820,6 +18704,7 @@ mod ser {
                 .fold(
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&tag_field_exists, &mut _s);
                         ::quote::__private::push_ident(&mut _s, "as");
                         ::quote::__private::push_ident(&mut _s, "usize");
@@ -16827,14 +18712,17 @@ mod ser {
                     },
                     |sum, expr| {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&sum, &mut _s);
                         ::quote::__private::push_add(&mut _s);
                         ::quote::ToTokens::to_tokens(&expr, &mut _s);
                         _s
                     },
                 );
+
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -16845,6 +18733,7 @@ mod ser {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&len, &mut _s);
                         _s
                     },
@@ -16852,8 +18741,10 @@ mod ser {
                 _s
             }
         };
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "let");
             ::quote::ToTokens::to_tokens(&let_mut, &mut _s);
             ::quote::__private::push_ident(&mut _s, "__serde_state");
@@ -16865,6 +18756,7 @@ mod ser {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -16875,6 +18767,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__serializer");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::ToTokens::to_tokens(&len, &mut _s);
@@ -16886,21 +18779,28 @@ mod ser {
             );
             ::quote::__private::push_semi(&mut _s);
             ::quote::ToTokens::to_tokens(&tag_field, &mut _s);
+
             {
                 use ::quote::__private::ext::*;
+
                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                 #[allow(unused_mut)]
                 let (mut serialize_fields, i) = serialize_fields.quote_into_iter();
+
                 let has_iter = has_iter | i;
                 let _: ::quote::__private::HasIterator = has_iter;
+
                 while true {
                     let serialize_fields = match serialize_fields.next() {
                         Some(_x) => ::quote::__private::RepInterp(_x),
                         None => break,
                     };
+
                     ::quote::ToTokens::to_tokens(&serialize_fields, &mut _s);
                 }
             };
+
             ::quote::__private::push_ident(&mut _s, "_serde");
             ::quote::__private::push_colon2(&mut _s);
             ::quote::__private::push_ident(&mut _s, "ser");
@@ -16913,6 +18813,7 @@ mod ser {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__serde_state");
                     _s
                 },
@@ -16920,6 +18821,7 @@ mod ser {
             _s
         })
     }
+
     fn serialize_enum(
         params: &Parameters,
         variants: &[Variant],
@@ -16930,6 +18832,7 @@ mod ser {
                 "assertion failed: variants.len() as u64 <= u64::from(u32::max_value())",
             )
         }
+
         let self_var = &params.self_var;
         let arms: Vec<_> = variants
             .iter()
@@ -16938,8 +18841,10 @@ mod ser {
                 serialize_variant(params, variant, variant_index as u32, cattrs)
             })
             .collect();
+
         crate::fragment::Fragment::Expr({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "match");
             ::quote::__private::push_star(&mut _s);
             ::quote::ToTokens::to_tokens(&self_var, &mut _s);
@@ -16948,27 +18853,35 @@ mod ser {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     {
                         use ::quote::__private::ext::*;
+
                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                         #[allow(unused_mut)]
                         let (mut arms, i) = arms.quote_into_iter();
+
                         let has_iter = has_iter | i;
                         let _: ::quote::__private::HasIterator = has_iter;
+
                         while true {
                             let arms = match arms.next() {
                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                 None => break,
                             };
+
                             ::quote::ToTokens::to_tokens(&arms, &mut _s);
                         }
                     };
+
                     _s
                 },
             );
             _s
         })
     }
+
     fn serialize_variant(
         params: &Parameters,
         variant: &Variant,
@@ -16977,6 +18890,7 @@ mod ser {
     ) -> TokenStream {
         let this = &params.this;
         let variant_ident = &variant.ident;
+
         if variant.attrs.skip_serializing() {
             let skipped_msg = {
                 let res = ::alloc::fmt::format(
@@ -16988,10 +18902,13 @@ mod ser {
                         ],
                     ),
                 );
+
                 res
             };
+
             let skipped_err = {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -17002,6 +18919,7 @@ mod ser {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "_serde");
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "ser");
@@ -17014,6 +18932,7 @@ mod ser {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&skipped_msg, &mut _s);
                                 _s
                             },
@@ -17023,15 +18942,18 @@ mod ser {
                 );
                 _s
             };
+
             let fields_pat = match variant.style {
                 Style::Unit => ::quote::__private::TokenStream::new(),
                 Style::Newtype | Style::Tuple => {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_group(
                         &mut _s,
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_dot2(&mut _s);
                             _s
                         },
@@ -17040,11 +18962,13 @@ mod ser {
                 }
                 Style::Struct => {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_group(
                         &mut _s,
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_dot2(&mut _s);
                             _s
                         },
@@ -17052,8 +18976,10 @@ mod ser {
                     _s
                 }
             };
+
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::ToTokens::to_tokens(&this, &mut _s);
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::ToTokens::to_tokens(&variant_ident, &mut _s);
@@ -17067,6 +18993,7 @@ mod ser {
             let case = match variant.style {
                 Style::Unit => {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&this, &mut _s);
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::ToTokens::to_tokens(&variant_ident, &mut _s);
@@ -17074,6 +19001,7 @@ mod ser {
                 }
                 Style::Newtype => {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&this, &mut _s);
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::ToTokens::to_tokens(&variant_ident, &mut _s);
@@ -17082,6 +19010,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "ref");
                             ::quote::__private::push_ident(&mut _s, "__field0");
                             _s
@@ -17099,12 +19028,15 @@ mod ser {
                                         &[::core::fmt::ArgumentV1::new_display(&i)],
                                     ),
                                 );
+
                                 res
                             },
                             Span::call_site(),
                         ));
+
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&this, &mut _s);
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::ToTokens::to_tokens(&variant_ident, &mut _s);
@@ -17113,27 +19045,36 @@ mod ser {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 {
                                     use ::quote::__private::ext::*;
+
                                     let mut _i = 0usize;
+
                                     let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                     #[allow(unused_mut)]
                                     let (mut field_names, i) = field_names.quote_into_iter();
+
                                     let has_iter = has_iter | i;
                                     let _: ::quote::__private::HasIterator = has_iter;
+
                                     while true {
                                         let field_names = match field_names.next() {
                                             Some(_x) => ::quote::__private::RepInterp(_x),
                                             None => break,
                                         };
+
                                         if _i > 0 {
                                             ::quote::__private::push_comma(&mut _s);
                                         }
+
                                         _i += 1;
                                         ::quote::__private::push_ident(&mut _s, "ref");
                                         ::quote::ToTokens::to_tokens(&field_names, &mut _s);
                                     }
                                 };
+
                                 _s
                             },
                         );
@@ -17142,8 +19083,10 @@ mod ser {
                 }
                 Style::Struct => {
                     let members = variant.fields.iter().map(|f| &f.member);
+
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&this, &mut _s);
                         ::quote::__private::push_colon2(&mut _s);
                         ::quote::ToTokens::to_tokens(&variant_ident, &mut _s);
@@ -17152,27 +19095,36 @@ mod ser {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 {
                                     use ::quote::__private::ext::*;
+
                                     let mut _i = 0usize;
+
                                     let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                     #[allow(unused_mut)]
                                     let (mut members, i) = members.quote_into_iter();
+
                                     let has_iter = has_iter | i;
                                     let _: ::quote::__private::HasIterator = has_iter;
+
                                     while true {
                                         let members = match members.next() {
                                             Some(_x) => ::quote::__private::RepInterp(_x),
                                             None => break,
                                         };
+
                                         if _i > 0 {
                                             ::quote::__private::push_comma(&mut _s);
                                         }
+
                                         _i += 1;
                                         ::quote::__private::push_ident(&mut _s, "ref");
                                         ::quote::ToTokens::to_tokens(&members, &mut _s);
                                     }
                                 };
+
                                 _s
                             },
                         );
@@ -17180,6 +19132,7 @@ mod ser {
                     }
                 }
             };
+
             let body = Match(
                 match cattrs.tag() {
                     attr::TagType::External => {
@@ -17207,8 +19160,10 @@ mod ser {
                     }
                 },
             );
+
             {
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::ToTokens::to_tokens(&case, &mut _s);
                 ::quote::__private::push_fat_arrow(&mut _s);
                 ::quote::ToTokens::to_tokens(&body, &mut _s);
@@ -17216,6 +19171,7 @@ mod ser {
             }
         }
     }
+
     fn serialize_externally_tagged_variant(
         params: &Parameters,
         variant: &Variant,
@@ -17224,10 +19180,13 @@ mod ser {
     ) -> Fragment {
         let type_name = cattrs.name().serialize_name();
         let variant_name = variant.attrs.name().serialize_name();
+
         if let Some(path) = variant.attrs.serialize_with() {
             let ser = wrap_serialize_variant_with(params, path, variant);
+
             return crate::fragment::Fragment::Expr({
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -17238,6 +19197,7 @@ mod ser {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "__serializer");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -17254,10 +19214,12 @@ mod ser {
                 _s
             });
         }
+
         match effective_style(variant) {
             Style::Unit => {
                 crate::fragment::Fragment::Expr({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -17268,6 +19230,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__serializer");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -17284,11 +19247,14 @@ mod ser {
             }
             Style::Newtype => {
                 let field = &variant.fields[0];
+
                 let mut field_expr = {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__field0");
                     _s
                 };
+
                 if let Some(path) = field.attrs.serialize_with() {
                     field_expr = wrap_serialize_field_with(
                         params,
@@ -17297,10 +19263,14 @@ mod ser {
                         &field_expr,
                     );
                 }
+
                 let span = field.original.span();
+
                 let func = {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     let _span: ::quote::__private::Span = span;
+
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
                     ::quote::__private::push_colon2_spanned(&mut _s, _span);
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "Serializer");
@@ -17312,14 +19282,17 @@ mod ser {
                     );
                     _s
                 };
+
                 crate::fragment::Fragment::Expr({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&func, &mut _s);
                     ::quote::__private::push_group(
                         &mut _s,
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__serializer");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -17360,6 +19333,7 @@ mod ser {
             }
         }
     }
+
     fn serialize_internally_tagged_variant(
         params: &Parameters,
         variant: &Variant,
@@ -17370,10 +19344,13 @@ mod ser {
         let variant_name = variant.attrs.name().serialize_name();
         let enum_ident_str = params.type_name();
         let variant_ident_str = variant.ident.to_string();
+
         if let Some(path) = variant.attrs.serialize_with() {
             let ser = wrap_serialize_variant_with(params, path, variant);
+
             return crate::fragment::Fragment::Expr({
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "__private");
@@ -17386,6 +19363,7 @@ mod ser {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "__serializer");
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::ToTokens::to_tokens(&enum_ident_str, &mut _s);
@@ -17404,10 +19382,12 @@ mod ser {
                 _s
             });
         }
+
         match effective_style(variant) {
             Style::Unit => {
                 crate::fragment::Fragment::Block({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::__private::push_ident(&mut _s, "mut");
                     ::quote::__private::push_ident(&mut _s, "__struct");
@@ -17419,6 +19399,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -17429,6 +19410,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__serializer");
                                     ::quote::__private::push_comma(&mut _s);
                                     ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -17448,6 +19430,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "ser");
@@ -17460,6 +19443,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_and(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "mut");
                                     ::quote::__private::push_ident(&mut _s, "__struct");
@@ -17486,6 +19470,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__struct");
                             _s
                         },
@@ -17495,11 +19480,14 @@ mod ser {
             }
             Style::Newtype => {
                 let field = &variant.fields[0];
+
                 let mut field_expr = {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__field0");
                     _s
                 };
+
                 if let Some(path) = field.attrs.serialize_with() {
                     field_expr = wrap_serialize_field_with(
                         params,
@@ -17508,10 +19496,14 @@ mod ser {
                         &field_expr,
                     );
                 }
+
                 let span = field.original.span();
+
                 let func = {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     let _span: ::quote::__private::Span = span;
+
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
                     ::quote::__private::push_colon2_spanned(&mut _s, _span);
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "__private");
@@ -17525,14 +19517,17 @@ mod ser {
                     );
                     _s
                 };
+
                 crate::fragment::Fragment::Expr({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&func, &mut _s);
                     ::quote::__private::push_group(
                         &mut _s,
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__serializer");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::ToTokens::to_tokens(&enum_ident_str, &mut _s);
@@ -17569,6 +19564,7 @@ mod ser {
             }
         }
     }
+
     fn serialize_adjacently_tagged_variant(
         params: &Parameters,
         variant: &Variant,
@@ -17582,8 +19578,10 @@ mod ser {
         let inner = Stmts(
             if let Some(path) = variant.attrs.serialize_with() {
                 let ser = wrap_serialize_variant_with(params, path, variant);
+
                 crate::fragment::Fragment::Expr({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "Serialize");
@@ -17594,6 +19592,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&ser, &mut _s);
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__serializer");
@@ -17607,6 +19606,7 @@ mod ser {
                     Style::Unit => {
                         return crate::fragment::Fragment::Block({
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "let");
                             ::quote::__private::push_ident(&mut _s, "mut");
                             ::quote::__private::push_ident(&mut _s, "__struct");
@@ -17618,6 +19618,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                     ::quote::__private::push_colon2(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -17628,6 +19629,7 @@ mod ser {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "__serializer");
                                             ::quote::__private::push_comma(&mut _s);
                                             ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -17647,6 +19649,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                     ::quote::__private::push_colon2(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "ser");
@@ -17659,6 +19662,7 @@ mod ser {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_and(&mut _s);
                                             ::quote::__private::push_ident(&mut _s, "mut");
                                             ::quote::__private::push_ident(&mut _s, "__struct");
@@ -17685,6 +19689,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__struct");
                                     _s
                                 },
@@ -17694,11 +19699,14 @@ mod ser {
                     }
                     Style::Newtype => {
                         let field = &variant.fields[0];
+
                         let mut field_expr = {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__field0");
                             _s
                         };
+
                         if let Some(path) = field.attrs.serialize_with() {
                             field_expr = wrap_serialize_field_with(
                                 params,
@@ -17707,10 +19715,14 @@ mod ser {
                                 &field_expr,
                             );
                         }
+
                         let span = field.original.span();
+
                         let func = {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             let _span: ::quote::__private::Span = span;
+
                             ::quote::__private::push_ident_spanned(
                                 &mut _s,
                                 _span,
@@ -17736,8 +19748,10 @@ mod ser {
                             );
                             _s
                         };
+
                         return crate::fragment::Fragment::Block({
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "let");
                             ::quote::__private::push_ident(&mut _s, "mut");
                             ::quote::__private::push_ident(&mut _s, "__struct");
@@ -17749,6 +19763,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                     ::quote::__private::push_colon2(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -17759,6 +19774,7 @@ mod ser {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "__serializer");
                                             ::quote::__private::push_comma(&mut _s);
                                             ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -17778,6 +19794,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                     ::quote::__private::push_colon2(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "ser");
@@ -17790,6 +19807,7 @@ mod ser {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_and(&mut _s);
                                             ::quote::__private::push_ident(&mut _s, "mut");
                                             ::quote::__private::push_ident(&mut _s, "__struct");
@@ -17811,12 +19829,14 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&func, &mut _s);
                                     ::quote::__private::push_group(
                                         &mut _s,
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_and(&mut _s);
                                             ::quote::__private::push_ident(&mut _s, "mut");
                                             ::quote::__private::push_ident(&mut _s, "__struct");
@@ -17843,6 +19863,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__struct");
                                     _s
                                 },
@@ -17896,6 +19917,7 @@ mod ser {
                                         &[::core::fmt::ArgumentV1::new_display(&i)],
                                     ),
                                 );
+
                                 res
                             },
                             Span::call_site(),
@@ -17906,15 +19928,19 @@ mod ser {
             Style::Struct => variant.fields.iter().map(|f| f.member.clone()).collect(),
         };
         let (_, ty_generics, where_clause) = params.generics.split_for_impl();
+
         let wrapper_generics = if fields_ident.is_empty() {
             params.generics.clone()
         } else {
             bound::with_lifetime_bound(&params.generics, "'__a")
         };
+
         let (wrapper_impl_generics, wrapper_ty_generics, _) = wrapper_generics
             .split_for_impl();
+
         crate::fragment::Fragment::Block({
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_ident(&mut _s, "struct");
             ::quote::__private::push_ident(&mut _s, "__AdjacentlyTagged");
             ::quote::ToTokens::to_tokens(&wrapper_generics, &mut _s);
@@ -17924,6 +19950,7 @@ mod ser {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "data");
                     ::quote::__private::push_colon(&mut _s);
                     ::quote::__private::push_group(
@@ -17931,24 +19958,31 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             {
                                 use ::quote::__private::ext::*;
+
                                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                 #[allow(unused_mut)]
                                 let (mut fields_ty, i) = fields_ty.quote_into_iter();
+
                                 let has_iter = has_iter | i;
                                 let _: ::quote::__private::HasIterator = has_iter;
+
                                 while true {
                                     let fields_ty = match fields_ty.next() {
                                         Some(_x) => ::quote::__private::RepInterp(_x),
                                         None => break,
                                     };
+
                                     ::quote::__private::push_and(&mut _s);
                                     ::quote::__private::push_lifetime(&mut _s, "\'__a");
                                     ::quote::ToTokens::to_tokens(&fields_ty, &mut _s);
                                     ::quote::__private::push_comma(&mut _s);
                                 }
                             };
+
                             _s
                         },
                     );
@@ -17982,6 +20016,7 @@ mod ser {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "fn");
                     ::quote::__private::push_ident(&mut _s, "serialize");
                     ::quote::__private::push_lt(&mut _s);
@@ -17992,6 +20027,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_and(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "self");
                             ::quote::__private::push_comma(&mut _s);
@@ -18028,18 +20064,21 @@ mod ser {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_pound(&mut _s);
                             ::quote::__private::push_group(
                                 &mut _s,
                                 ::quote::__private::Delimiter::Bracket,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "allow");
                                     ::quote::__private::push_group(
                                         &mut _s,
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "unused_variables");
                                             _s
                                         },
@@ -18053,22 +20092,29 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     {
                                         use ::quote::__private::ext::*;
+
                                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                         #[allow(unused_mut)]
                                         let (mut fields_ident, i) = fields_ident.quote_into_iter();
+
                                         let has_iter = has_iter | i;
                                         let _: ::quote::__private::HasIterator = has_iter;
+
                                         while true {
                                             let fields_ident = match fields_ident.next() {
                                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                                 None => break,
                                             };
+
                                             ::quote::ToTokens::to_tokens(&fields_ident, &mut _s);
                                             ::quote::__private::push_comma(&mut _s);
                                         }
                                     };
+
                                     _s
                                 },
                             );
@@ -18095,6 +20141,7 @@ mod ser {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -18105,6 +20152,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__serializer");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -18124,6 +20172,7 @@ mod ser {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "ser");
@@ -18136,6 +20185,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_and(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "mut");
                             ::quote::__private::push_ident(&mut _s, "__struct");
@@ -18157,6 +20207,7 @@ mod ser {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "ser");
@@ -18169,6 +20220,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_and(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "mut");
                             ::quote::__private::push_ident(&mut _s, "__struct");
@@ -18185,6 +20237,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Brace,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "data");
                                     ::quote::__private::push_colon(&mut _s);
                                     ::quote::__private::push_group(
@@ -18192,22 +20245,29 @@ mod ser {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             {
                                                 use ::quote::__private::ext::*;
+
                                                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                                 #[allow(unused_mut)]
                                                 let (mut fields_ident, i) = fields_ident.quote_into_iter();
+
                                                 let has_iter = has_iter | i;
                                                 let _: ::quote::__private::HasIterator = has_iter;
+
                                                 while true {
                                                     let fields_ident = match fields_ident.next() {
                                                         Some(_x) => ::quote::__private::RepInterp(_x),
                                                         None => break,
                                                     };
+
                                                     ::quote::ToTokens::to_tokens(&fields_ident, &mut _s);
                                                     ::quote::__private::push_comma(&mut _s);
                                                 }
                                             };
+
                                             _s
                                         },
                                     );
@@ -18247,6 +20307,7 @@ mod ser {
                 ::quote::__private::Delimiter::Parenthesis,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__struct");
                     _s
                 },
@@ -18254,6 +20315,7 @@ mod ser {
             _s
         })
     }
+
     fn serialize_untagged_variant(
         params: &Parameters,
         variant: &Variant,
@@ -18261,8 +20323,10 @@ mod ser {
     ) -> Fragment {
         if let Some(path) = variant.attrs.serialize_with() {
             let ser = wrap_serialize_variant_with(params, path, variant);
+
             return crate::fragment::Fragment::Expr({
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "_serde");
                 ::quote::__private::push_colon2(&mut _s);
                 ::quote::__private::push_ident(&mut _s, "Serialize");
@@ -18273,6 +20337,7 @@ mod ser {
                     ::quote::__private::Delimiter::Parenthesis,
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&ser, &mut _s);
                         ::quote::__private::push_comma(&mut _s);
                         ::quote::__private::push_ident(&mut _s, "__serializer");
@@ -18282,10 +20347,12 @@ mod ser {
                 _s
             });
         }
+
         match effective_style(variant) {
             Style::Unit => {
                 crate::fragment::Fragment::Expr({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -18296,6 +20363,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__serializer");
                             _s
                         },
@@ -18305,11 +20373,14 @@ mod ser {
             }
             Style::Newtype => {
                 let field = &variant.fields[0];
+
                 let mut field_expr = {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "__field0");
                     _s
                 };
+
                 if let Some(path) = field.attrs.serialize_with() {
                     field_expr = wrap_serialize_field_with(
                         params,
@@ -18318,10 +20389,14 @@ mod ser {
                         &field_expr,
                     );
                 }
+
                 let span = field.original.span();
+
                 let func = {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     let _span: ::quote::__private::Span = span;
+
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
                     ::quote::__private::push_colon2_spanned(&mut _s, _span);
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "Serialize");
@@ -18329,14 +20404,17 @@ mod ser {
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "serialize");
                     _s
                 };
+
                 crate::fragment::Fragment::Expr({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&func, &mut _s);
                     ::quote::__private::push_group(
                         &mut _s,
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&field_expr, &mut _s);
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "__serializer");
@@ -18351,6 +20429,7 @@ mod ser {
             }
             Style::Struct => {
                 let type_name = cattrs.name().serialize_name();
+
                 serialize_struct_variant(
                     StructVariant::Untagged,
                     params,
@@ -18360,10 +20439,12 @@ mod ser {
             }
         }
     }
+
     enum TupleVariant {
         ExternallyTagged { type_name: String, variant_index: u32, variant_name: String },
         Untagged,
     }
+
     fn serialize_tuple_variant(
         context: TupleVariant,
         params: &Parameters,
@@ -18373,22 +20454,26 @@ mod ser {
             TupleVariant::ExternallyTagged { .. } => TupleTrait::SerializeTupleVariant,
             TupleVariant::Untagged => TupleTrait::SerializeTuple,
         };
+
         let serialize_stmts = serialize_tuple_struct_visitor(
             fields,
             params,
             true,
             &tuple_trait,
         );
+
         let mut serialized_fields = fields
             .iter()
             .enumerate()
             .filter(|(_, field)| !field.attrs.skip_serializing())
             .peekable();
+
         let let_mut = mut_if(serialized_fields.peek().is_some());
         let len = serialized_fields
             .map(|(i, field)| match field.attrs.skip_serializing_if() {
                 None => {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::parse(&mut _s, "1");
                     _s
                 }
@@ -18401,12 +20486,15 @@ mod ser {
                                     &[::core::fmt::ArgumentV1::new_display(&i)],
                                 ),
                             );
+
                             res
                         },
                         Span::call_site(),
                     );
+
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "if");
                         ::quote::ToTokens::to_tokens(&path, &mut _s);
                         ::quote::__private::push_group(
@@ -18414,6 +20502,7 @@ mod ser {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&field_expr, &mut _s);
                                 _s
                             },
@@ -18423,6 +20512,7 @@ mod ser {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::parse(&mut _s, "0");
                                 _s
                             },
@@ -18433,6 +20523,7 @@ mod ser {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::parse(&mut _s, "1");
                                 _s
                             },
@@ -18444,21 +20535,25 @@ mod ser {
             .fold(
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::parse(&mut _s, "0");
                     _s
                 },
                 |sum, expr| {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&sum, &mut _s);
                     ::quote::__private::push_add(&mut _s);
                     ::quote::ToTokens::to_tokens(&expr, &mut _s);
                     _s
                 },
             );
+
         match context {
             TupleVariant::ExternallyTagged { type_name, variant_index, variant_name } => {
                 crate::fragment::Fragment::Block({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::ToTokens::to_tokens(&let_mut, &mut _s);
                     ::quote::__private::push_ident(&mut _s, "__serde_state");
@@ -18470,6 +20565,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -18483,6 +20579,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__serializer");
                                     ::quote::__private::push_comma(&mut _s);
                                     ::quote::ToTokens::to_tokens(&type_name, &mut _s);
@@ -18499,21 +20596,28 @@ mod ser {
                         },
                     );
                     ::quote::__private::push_semi(&mut _s);
+
                     {
                         use ::quote::__private::ext::*;
+
                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                         #[allow(unused_mut)]
                         let (mut serialize_stmts, i) = serialize_stmts.quote_into_iter();
+
                         let has_iter = has_iter | i;
                         let _: ::quote::__private::HasIterator = has_iter;
+
                         while true {
                             let serialize_stmts = match serialize_stmts.next() {
                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                 None => break,
                             };
+
                             ::quote::ToTokens::to_tokens(&serialize_stmts, &mut _s);
                         }
                     };
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "ser");
@@ -18526,6 +20630,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__serde_state");
                             _s
                         },
@@ -18536,6 +20641,7 @@ mod ser {
             TupleVariant::Untagged => {
                 crate::fragment::Fragment::Block({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::ToTokens::to_tokens(&let_mut, &mut _s);
                     ::quote::__private::push_ident(&mut _s, "__serde_state");
@@ -18547,6 +20653,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -18557,6 +20664,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__serializer");
                                     ::quote::__private::push_comma(&mut _s);
                                     ::quote::ToTokens::to_tokens(&len, &mut _s);
@@ -18567,21 +20675,28 @@ mod ser {
                         },
                     );
                     ::quote::__private::push_semi(&mut _s);
+
                     {
                         use ::quote::__private::ext::*;
+
                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                         #[allow(unused_mut)]
                         let (mut serialize_stmts, i) = serialize_stmts.quote_into_iter();
+
                         let has_iter = has_iter | i;
                         let _: ::quote::__private::HasIterator = has_iter;
+
                         while true {
                             let serialize_stmts = match serialize_stmts.next() {
                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                 None => break,
                             };
+
                             ::quote::ToTokens::to_tokens(&serialize_stmts, &mut _s);
                         }
                     };
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "ser");
@@ -18594,6 +20709,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__serde_state");
                             _s
                         },
@@ -18603,11 +20719,13 @@ mod ser {
             }
         }
     }
+
     enum StructVariant<'a> {
         ExternallyTagged { variant_index: u32, variant_name: String },
         InternallyTagged { tag: &'a str, variant_name: String },
         Untagged,
     }
+
     fn serialize_struct_variant<'a>(
         context: StructVariant<'a>,
         params: &Parameters,
@@ -18617,29 +20735,35 @@ mod ser {
         if fields.iter().any(|field| field.attrs.flatten()) {
             return serialize_struct_variant_with_flatten(context, params, fields, name);
         }
+
         let struct_trait = match context {
             StructVariant::ExternallyTagged { .. } => StructTrait::SerializeStructVariant,
             StructVariant::InternallyTagged { .. } | StructVariant::Untagged => {
                 StructTrait::SerializeStruct
             }
         };
+
         let serialize_fields = serialize_struct_visitor(
             fields,
             params,
             true,
             &struct_trait,
         );
+
         let mut serialized_fields = fields
             .iter()
             .filter(|&field| !field.attrs.skip_serializing())
             .peekable();
+
         let let_mut = mut_if(serialized_fields.peek().is_some());
         let len = serialized_fields
             .map(|field| {
                 let member = &field.member;
+
                 match field.attrs.skip_serializing_if() {
                     Some(path) => {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "if");
                         ::quote::ToTokens::to_tokens(&path, &mut _s);
                         ::quote::__private::push_group(
@@ -18647,6 +20771,7 @@ mod ser {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&member, &mut _s);
                                 _s
                             },
@@ -18656,6 +20781,7 @@ mod ser {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::parse(&mut _s, "0");
                                 _s
                             },
@@ -18666,6 +20792,7 @@ mod ser {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::parse(&mut _s, "1");
                                 _s
                             },
@@ -18674,6 +20801,7 @@ mod ser {
                     }
                     None => {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::parse(&mut _s, "1");
                         _s
                     }
@@ -18682,21 +20810,25 @@ mod ser {
             .fold(
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::parse(&mut _s, "0");
                     _s
                 },
                 |sum, expr| {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&sum, &mut _s);
                     ::quote::__private::push_add(&mut _s);
                     ::quote::ToTokens::to_tokens(&expr, &mut _s);
                     _s
                 },
             );
+
         match context {
             StructVariant::ExternallyTagged { variant_index, variant_name } => {
                 crate::fragment::Fragment::Block({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::ToTokens::to_tokens(&let_mut, &mut _s);
                     ::quote::__private::push_ident(&mut _s, "__serde_state");
@@ -18708,6 +20840,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -18721,6 +20854,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__serializer");
                                     ::quote::__private::push_comma(&mut _s);
                                     ::quote::ToTokens::to_tokens(&name, &mut _s);
@@ -18738,22 +20872,29 @@ mod ser {
                         },
                     );
                     ::quote::__private::push_semi(&mut _s);
+
                     {
                         use ::quote::__private::ext::*;
+
                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                         #[allow(unused_mut)]
                         let (mut serialize_fields, i) = serialize_fields
                             .quote_into_iter();
+
                         let has_iter = has_iter | i;
                         let _: ::quote::__private::HasIterator = has_iter;
+
                         while true {
                             let serialize_fields = match serialize_fields.next() {
                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                 None => break,
                             };
+
                             ::quote::ToTokens::to_tokens(&serialize_fields, &mut _s);
                         }
                     };
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "ser");
@@ -18766,6 +20907,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__serde_state");
                             _s
                         },
@@ -18776,6 +20918,7 @@ mod ser {
             StructVariant::InternallyTagged { tag, variant_name } => {
                 crate::fragment::Fragment::Block({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::__private::push_ident(&mut _s, "mut");
                     ::quote::__private::push_ident(&mut _s, "__serde_state");
@@ -18787,6 +20930,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -18797,6 +20941,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__serializer");
                                     ::quote::__private::push_comma(&mut _s);
                                     ::quote::ToTokens::to_tokens(&name, &mut _s);
@@ -18819,6 +20964,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "ser");
@@ -18831,6 +20977,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_and(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "mut");
                                     ::quote::__private::push_ident(&mut _s, "__serde_state");
@@ -18846,22 +20993,29 @@ mod ser {
                         },
                     );
                     ::quote::__private::push_semi(&mut _s);
+
                     {
                         use ::quote::__private::ext::*;
+
                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                         #[allow(unused_mut)]
                         let (mut serialize_fields, i) = serialize_fields
                             .quote_into_iter();
+
                         let has_iter = has_iter | i;
                         let _: ::quote::__private::HasIterator = has_iter;
+
                         while true {
                             let serialize_fields = match serialize_fields.next() {
                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                 None => break,
                             };
+
                             ::quote::ToTokens::to_tokens(&serialize_fields, &mut _s);
                         }
                     };
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "ser");
@@ -18874,6 +21028,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__serde_state");
                             _s
                         },
@@ -18884,6 +21039,7 @@ mod ser {
             StructVariant::Untagged => {
                 crate::fragment::Fragment::Block({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::ToTokens::to_tokens(&let_mut, &mut _s);
                     ::quote::__private::push_ident(&mut _s, "__serde_state");
@@ -18895,6 +21051,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -18905,6 +21062,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__serializer");
                                     ::quote::__private::push_comma(&mut _s);
                                     ::quote::ToTokens::to_tokens(&name, &mut _s);
@@ -18918,22 +21076,29 @@ mod ser {
                         },
                     );
                     ::quote::__private::push_semi(&mut _s);
+
                     {
                         use ::quote::__private::ext::*;
+
                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                         #[allow(unused_mut)]
                         let (mut serialize_fields, i) = serialize_fields
                             .quote_into_iter();
+
                         let has_iter = has_iter | i;
                         let _: ::quote::__private::HasIterator = has_iter;
+
                         while true {
                             let serialize_fields = match serialize_fields.next() {
                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                 None => break,
                             };
+
                             ::quote::ToTokens::to_tokens(&serialize_fields, &mut _s);
                         }
                     };
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "ser");
@@ -18946,6 +21111,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__serde_state");
                             _s
                         },
@@ -18955,6 +21121,7 @@ mod ser {
             }
         }
     }
+
     fn serialize_struct_variant_with_flatten<'a>(
         context: StructVariant<'a>,
         params: &Parameters,
@@ -18968,11 +21135,14 @@ mod ser {
             true,
             &struct_trait,
         );
+
         let mut serialized_fields = fields
             .iter()
             .filter(|&field| !field.attrs.skip_serializing())
             .peekable();
+
         let let_mut = mut_if(serialized_fields.peek().is_some());
+
         match context {
             StructVariant::ExternallyTagged { variant_index, variant_name } => {
                 let this = &params.this;
@@ -18985,8 +21155,10 @@ mod ser {
                 );
                 let (wrapper_impl_generics, wrapper_ty_generics, _) = wrapper_generics
                     .split_for_impl();
+
                 crate::fragment::Fragment::Block({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "struct");
                     ::quote::__private::push_ident(&mut _s, "__EnumFlatten");
                     ::quote::ToTokens::to_tokens(&wrapper_generics, &mut _s);
@@ -18996,6 +21168,7 @@ mod ser {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "data");
                             ::quote::__private::push_colon(&mut _s);
                             ::quote::__private::push_group(
@@ -19003,24 +21176,31 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     {
                                         use ::quote::__private::ext::*;
+
                                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                         #[allow(unused_mut)]
                                         let (mut fields_ty, i) = fields_ty.quote_into_iter();
+
                                         let has_iter = has_iter | i;
                                         let _: ::quote::__private::HasIterator = has_iter;
+
                                         while true {
                                             let fields_ty = match fields_ty.next() {
                                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                                 None => break,
                                             };
+
                                             ::quote::__private::push_and(&mut _s);
                                             ::quote::__private::push_lifetime(&mut _s, "\'__a");
                                             ::quote::ToTokens::to_tokens(&fields_ty, &mut _s);
                                             ::quote::__private::push_comma(&mut _s);
                                         }
                                     };
+
                                     _s
                                 },
                             );
@@ -19054,6 +21234,7 @@ mod ser {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "fn");
                             ::quote::__private::push_ident(&mut _s, "serialize");
                             ::quote::__private::push_lt(&mut _s);
@@ -19064,6 +21245,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_and(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "self");
                                     ::quote::__private::push_comma(&mut _s);
@@ -19100,28 +21282,36 @@ mod ser {
                                 ::quote::__private::Delimiter::Brace,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "let");
                                     ::quote::__private::push_group(
                                         &mut _s,
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             {
                                                 use ::quote::__private::ext::*;
+
                                                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                                 #[allow(unused_mut)]
                                                 let (mut members, i) = members.quote_into_iter();
+
                                                 let has_iter = has_iter | i;
                                                 let _: ::quote::__private::HasIterator = has_iter;
+
                                                 while true {
                                                     let members = match members.next() {
                                                         Some(_x) => ::quote::__private::RepInterp(_x),
                                                         None => break,
                                                     };
+
                                                     ::quote::ToTokens::to_tokens(&members, &mut _s);
                                                     ::quote::__private::push_comma(&mut _s);
                                                 }
                                             };
+
                                             _s
                                         },
                                     );
@@ -19141,6 +21331,7 @@ mod ser {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "_serde");
                                             ::quote::__private::push_colon2(&mut _s);
                                             ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -19151,6 +21342,7 @@ mod ser {
                                                 ::quote::__private::Delimiter::Parenthesis,
                                                 {
                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                     ::quote::__private::push_ident(&mut _s, "__serializer");
                                                     ::quote::__private::push_comma(&mut _s);
                                                     ::quote::__private::push_ident(&mut _s, "_serde");
@@ -19165,22 +21357,29 @@ mod ser {
                                         },
                                     );
                                     ::quote::__private::push_semi(&mut _s);
+
                                     {
                                         use ::quote::__private::ext::*;
+
                                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                         #[allow(unused_mut)]
                                         let (mut serialize_fields, i) = serialize_fields
                                             .quote_into_iter();
+
                                         let has_iter = has_iter | i;
                                         let _: ::quote::__private::HasIterator = has_iter;
+
                                         while true {
                                             let serialize_fields = match serialize_fields.next() {
                                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                                 None => break,
                                             };
+
                                             ::quote::ToTokens::to_tokens(&serialize_fields, &mut _s);
                                         }
                                     };
+
                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                     ::quote::__private::push_colon2(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "ser");
@@ -19193,6 +21392,7 @@ mod ser {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "__serde_state");
                                             _s
                                         },
@@ -19213,6 +21413,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__serializer");
                             ::quote::__private::push_comma(&mut _s);
                             ::quote::ToTokens::to_tokens(&name, &mut _s);
@@ -19228,6 +21429,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Brace,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "data");
                                     ::quote::__private::push_colon(&mut _s);
                                     ::quote::__private::push_group(
@@ -19235,22 +21437,29 @@ mod ser {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             {
                                                 use ::quote::__private::ext::*;
+
                                                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                                 #[allow(unused_mut)]
                                                 let (mut members, i) = members.quote_into_iter();
+
                                                 let has_iter = has_iter | i;
                                                 let _: ::quote::__private::HasIterator = has_iter;
+
                                                 while true {
                                                     let members = match members.next() {
                                                         Some(_x) => ::quote::__private::RepInterp(_x),
                                                         None => break,
                                                     };
+
                                                     ::quote::ToTokens::to_tokens(&members, &mut _s);
                                                     ::quote::__private::push_comma(&mut _s);
                                                 }
                                             };
+
                                             _s
                                         },
                                     );
@@ -19280,6 +21489,7 @@ mod ser {
             StructVariant::InternallyTagged { tag, variant_name } => {
                 crate::fragment::Fragment::Block({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::ToTokens::to_tokens(&let_mut, &mut _s);
                     ::quote::__private::push_ident(&mut _s, "__serde_state");
@@ -19291,6 +21501,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -19301,6 +21512,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__serializer");
                                     ::quote::__private::push_comma(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "_serde");
@@ -19322,6 +21534,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "ser");
@@ -19334,6 +21547,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_and(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "mut");
                                     ::quote::__private::push_ident(&mut _s, "__serde_state");
@@ -19349,22 +21563,29 @@ mod ser {
                         },
                     );
                     ::quote::__private::push_semi(&mut _s);
+
                     {
                         use ::quote::__private::ext::*;
+
                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                         #[allow(unused_mut)]
                         let (mut serialize_fields, i) = serialize_fields
                             .quote_into_iter();
+
                         let has_iter = has_iter | i;
                         let _: ::quote::__private::HasIterator = has_iter;
+
                         while true {
                             let serialize_fields = match serialize_fields.next() {
                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                 None => break,
                             };
+
                             ::quote::ToTokens::to_tokens(&serialize_fields, &mut _s);
                         }
                     };
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "ser");
@@ -19377,6 +21598,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__serde_state");
                             _s
                         },
@@ -19387,6 +21609,7 @@ mod ser {
             StructVariant::Untagged => {
                 crate::fragment::Fragment::Block({
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "let");
                     ::quote::ToTokens::to_tokens(&let_mut, &mut _s);
                     ::quote::__private::push_ident(&mut _s, "__serde_state");
@@ -19398,6 +21621,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "_serde");
                             ::quote::__private::push_colon2(&mut _s);
                             ::quote::__private::push_ident(&mut _s, "Serializer");
@@ -19408,6 +21632,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "__serializer");
                                     ::quote::__private::push_comma(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "_serde");
@@ -19422,22 +21647,29 @@ mod ser {
                         },
                     );
                     ::quote::__private::push_semi(&mut _s);
+
                     {
                         use ::quote::__private::ext::*;
+
                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                         #[allow(unused_mut)]
                         let (mut serialize_fields, i) = serialize_fields
                             .quote_into_iter();
+
                         let has_iter = has_iter | i;
                         let _: ::quote::__private::HasIterator = has_iter;
+
                         while true {
                             let serialize_fields = match serialize_fields.next() {
                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                 None => break,
                             };
+
                             ::quote::ToTokens::to_tokens(&serialize_fields, &mut _s);
                         }
                     };
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "ser");
@@ -19450,6 +21682,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "__serde_state");
                             _s
                         },
@@ -19459,6 +21692,7 @@ mod ser {
             }
         }
     }
+
     fn serialize_tuple_struct_visitor(
         fields: &[Field],
         params: &Parameters,
@@ -19479,12 +21713,15 @@ mod ser {
                                     &[::core::fmt::ArgumentV1::new_display(&i)],
                                 ),
                             );
+
                             res
                         },
                         Span::call_site(),
                     );
+
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&id, &mut _s);
                         _s
                     }
@@ -19498,23 +21735,27 @@ mod ser {
                         }),
                     )
                 };
+
                 let skip = field
                     .attrs
                     .skip_serializing_if()
                     .map(|path| {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&path, &mut _s);
                         ::quote::__private::push_group(
                             &mut _s,
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&field_expr, &mut _s);
                                 _s
                             },
                         );
                         _s
                     });
+
                 if let Some(path) = field.attrs.serialize_with() {
                     field_expr = wrap_serialize_field_with(
                         params,
@@ -19523,10 +21764,13 @@ mod ser {
                         &field_expr,
                     );
                 }
+
                 let span = field.original.span();
                 let func = tuple_trait.serialize_element(span);
+
                 let ser = {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "try");
                     ::quote::__private::push_bang(&mut _s);
                     ::quote::__private::push_group(
@@ -19534,12 +21778,14 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&func, &mut _s);
                             ::quote::__private::push_group(
                                 &mut _s,
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_and(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "mut");
                                     ::quote::__private::push_ident(&mut _s, "__serde_state");
@@ -19554,10 +21800,12 @@ mod ser {
                     ::quote::__private::push_semi(&mut _s);
                     _s
                 };
+
                 match skip {
                     None => ser,
                     Some(skip) => {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "if");
                         ::quote::__private::push_bang(&mut _s);
                         ::quote::ToTokens::to_tokens(&skip, &mut _s);
@@ -19566,6 +21814,7 @@ mod ser {
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&ser, &mut _s);
                                 _s
                             },
@@ -19576,6 +21825,7 @@ mod ser {
             })
             .collect()
     }
+
     fn serialize_struct_visitor(
         fields: &[Field],
         params: &Parameters,
@@ -19587,33 +21837,39 @@ mod ser {
             .filter(|&field| !field.attrs.skip_serializing())
             .map(|field| {
                 let member = &field.member;
+
                 let mut field_expr = if is_enum {
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&member, &mut _s);
                         _s
                     }
                 } else {
                     get_member(params, field, member)
                 };
+
                 let key_expr = field.attrs.name().serialize_name();
                 let skip = field
                     .attrs
                     .skip_serializing_if()
                     .map(|path| {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::ToTokens::to_tokens(&path, &mut _s);
                         ::quote::__private::push_group(
                             &mut _s,
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&field_expr, &mut _s);
                                 _s
                             },
                         );
                         _s
                     });
+
                 if let Some(path) = field.attrs.serialize_with() {
                     field_expr = wrap_serialize_field_with(
                         params,
@@ -19622,11 +21878,15 @@ mod ser {
                         &field_expr,
                     );
                 }
+
                 let span = field.original.span();
+
                 let ser = if field.attrs.flatten() {
                     let func = {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         let _span: ::quote::__private::Span = span;
+
                         ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
                         ::quote::__private::push_colon2_spanned(&mut _s, _span);
                         ::quote::__private::push_ident_spanned(
@@ -19642,8 +21902,10 @@ mod ser {
                         );
                         _s
                     };
+
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "try");
                         ::quote::__private::push_bang(&mut _s);
                         ::quote::__private::push_group(
@@ -19651,12 +21913,14 @@ mod ser {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&func, &mut _s);
                                 ::quote::__private::push_group(
                                     &mut _s,
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_and(&mut _s);
                                         ::quote::ToTokens::to_tokens(&field_expr, &mut _s);
                                         ::quote::__private::push_comma(&mut _s);
@@ -19675,6 +21939,7 @@ mod ser {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::__private::push_and(&mut _s);
                                                 ::quote::__private::push_ident(&mut _s, "mut");
                                                 ::quote::__private::push_ident(&mut _s, "__serde_state");
@@ -19692,8 +21957,10 @@ mod ser {
                     }
                 } else {
                     let func = struct_trait.serialize_field(span);
+
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_ident(&mut _s, "try");
                         ::quote::__private::push_bang(&mut _s);
                         ::quote::__private::push_group(
@@ -19701,12 +21968,14 @@ mod ser {
                             ::quote::__private::Delimiter::Parenthesis,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&func, &mut _s);
                                 ::quote::__private::push_group(
                                     &mut _s,
                                     ::quote::__private::Delimiter::Parenthesis,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_and(&mut _s);
                                         ::quote::__private::push_ident(&mut _s, "mut");
                                         ::quote::__private::push_ident(&mut _s, "__serde_state");
@@ -19724,12 +21993,14 @@ mod ser {
                         _s
                     }
                 };
+
                 match skip {
                     None => ser,
                     Some(skip) => {
                         if let Some(skip_func) = struct_trait.skip_field(span) {
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "if");
                                 ::quote::__private::push_bang(&mut _s);
                                 ::quote::ToTokens::to_tokens(&skip, &mut _s);
@@ -19738,6 +22009,7 @@ mod ser {
                                     ::quote::__private::Delimiter::Brace,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::ToTokens::to_tokens(&ser, &mut _s);
                                         _s
                                     },
@@ -19748,6 +22020,7 @@ mod ser {
                                     ::quote::__private::Delimiter::Brace,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::__private::push_ident(&mut _s, "try");
                                         ::quote::__private::push_bang(&mut _s);
                                         ::quote::__private::push_group(
@@ -19755,12 +22028,14 @@ mod ser {
                                             ::quote::__private::Delimiter::Parenthesis,
                                             {
                                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                                 ::quote::ToTokens::to_tokens(&skip_func, &mut _s);
                                                 ::quote::__private::push_group(
                                                     &mut _s,
                                                     ::quote::__private::Delimiter::Parenthesis,
                                                     {
                                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                                         ::quote::__private::push_and(&mut _s);
                                                         ::quote::__private::push_ident(&mut _s, "mut");
                                                         ::quote::__private::push_ident(&mut _s, "__serde_state");
@@ -19781,6 +22056,7 @@ mod ser {
                         } else {
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::__private::push_ident(&mut _s, "if");
                                 ::quote::__private::push_bang(&mut _s);
                                 ::quote::ToTokens::to_tokens(&skip, &mut _s);
@@ -19789,6 +22065,7 @@ mod ser {
                                     ::quote::__private::Delimiter::Brace,
                                     {
                                         let mut _s = ::quote::__private::TokenStream::new();
+
                                         ::quote::ToTokens::to_tokens(&ser, &mut _s);
                                         _s
                                     },
@@ -19801,6 +22078,7 @@ mod ser {
             })
             .collect()
     }
+
     fn wrap_serialize_field_with(
         params: &Parameters,
         field_ty: &syn::Type,
@@ -19814,12 +22092,14 @@ mod ser {
             &[
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&field_expr, &mut _s);
                     _s
                 },
             ],
         )
     }
+
     fn wrap_serialize_variant_with(
         params: &Parameters,
         serialize_with: &syn::ExprPath,
@@ -19841,19 +22121,23 @@ mod ser {
                                         &[::core::fmt::ArgumentV1::new_display(&member.index)],
                                     ),
                                 );
+
                                 res
                             },
                             Span::call_site(),
                         )
                     }
                 };
+
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::ToTokens::to_tokens(&id, &mut _s);
                     _s
                 }
             })
             .collect();
+
         wrap_serialize_with(
             params,
             serialize_with,
@@ -19861,6 +22145,7 @@ mod ser {
             field_exprs.as_slice(),
         )
     }
+
     fn wrap_serialize_with(
         params: &Parameters,
         serialize_with: &syn::ExprPath,
@@ -19869,11 +22154,13 @@ mod ser {
     ) -> TokenStream {
         let this = &params.this;
         let (_, ty_generics, where_clause) = params.generics.split_for_impl();
+
         let wrapper_generics = if field_exprs.is_empty() {
             params.generics.clone()
         } else {
             bound::with_lifetime_bound(&params.generics, "'__a")
         };
+
         let (wrapper_impl_generics, wrapper_ty_generics, _) = wrapper_generics
             .split_for_impl();
         let field_access = (0..field_exprs.len())
@@ -19883,13 +22170,16 @@ mod ser {
                     span: Span::call_site(),
                 })
             });
+
         {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_group(
                 &mut _s,
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "struct");
                     ::quote::__private::push_ident(&mut _s, "__SerializeWith");
                     ::quote::ToTokens::to_tokens(&wrapper_impl_generics, &mut _s);
@@ -19899,6 +22189,7 @@ mod ser {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "values");
                             ::quote::__private::push_colon(&mut _s);
                             ::quote::__private::push_group(
@@ -19906,24 +22197,31 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     {
                                         use ::quote::__private::ext::*;
+
                                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                         #[allow(unused_mut)]
                                         let (mut field_tys, i) = field_tys.quote_into_iter();
+
                                         let has_iter = has_iter | i;
                                         let _: ::quote::__private::HasIterator = has_iter;
+
                                         while true {
                                             let field_tys = match field_tys.next() {
                                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                                 None => break,
                                             };
+
                                             ::quote::__private::push_and(&mut _s);
                                             ::quote::__private::push_lifetime(&mut _s, "\'__a");
                                             ::quote::ToTokens::to_tokens(&field_tys, &mut _s);
                                             ::quote::__private::push_comma(&mut _s);
                                         }
                                     };
+
                                     _s
                                 },
                             );
@@ -19957,6 +22255,7 @@ mod ser {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "fn");
                             ::quote::__private::push_ident(&mut _s, "serialize");
                             ::quote::__private::push_lt(&mut _s);
@@ -19967,6 +22266,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_and(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "self");
                                     ::quote::__private::push_comma(&mut _s);
@@ -20003,24 +22303,31 @@ mod ser {
                                 ::quote::__private::Delimiter::Brace,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&serialize_with, &mut _s);
                                     ::quote::__private::push_group(
                                         &mut _s,
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             {
                                                 use ::quote::__private::ext::*;
+
                                                 let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                                 #[allow(unused_mut)]
                                                 let (mut field_access, i) = field_access.quote_into_iter();
+
                                                 let has_iter = has_iter | i;
                                                 let _: ::quote::__private::HasIterator = has_iter;
+
                                                 while true {
                                                     let field_access = match field_access.next() {
                                                         Some(_x) => ::quote::__private::RepInterp(_x),
                                                         None => break,
                                                     };
+
                                                     ::quote::__private::push_ident(&mut _s, "self");
                                                     ::quote::__private::push_dot(&mut _s);
                                                     ::quote::__private::push_ident(&mut _s, "values");
@@ -20029,6 +22336,7 @@ mod ser {
                                                     ::quote::__private::push_comma(&mut _s);
                                                 }
                                             };
+
                                             ::quote::__private::push_ident(&mut _s, "__s");
                                             _s
                                         },
@@ -20046,6 +22354,7 @@ mod ser {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "values");
                             ::quote::__private::push_colon(&mut _s);
                             ::quote::__private::push_group(
@@ -20053,22 +22362,29 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     {
                                         use ::quote::__private::ext::*;
+
                                         let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
                                         #[allow(unused_mut)]
                                         let (mut field_exprs, i) = field_exprs.quote_into_iter();
+
                                         let has_iter = has_iter | i;
                                         let _: ::quote::__private::HasIterator = has_iter;
+
                                         while true {
                                             let field_exprs = match field_exprs.next() {
                                                 Some(_x) => ::quote::__private::RepInterp(_x),
                                                 None => break,
                                             };
+
                                             ::quote::ToTokens::to_tokens(&field_exprs, &mut _s);
                                             ::quote::__private::push_comma(&mut _s);
                                         }
                                     };
+
                                     _s
                                 },
                             );
@@ -20095,10 +22411,12 @@ mod ser {
             _s
         }
     }
+
     fn mut_if(is_mut: bool) -> Option<TokenStream> {
         if is_mut {
             Some({
                 let mut _s = ::quote::__private::TokenStream::new();
+
                 ::quote::__private::push_ident(&mut _s, "mut");
                 _s
             })
@@ -20106,19 +22424,23 @@ mod ser {
             None
         }
     }
+
     fn get_member(params: &Parameters, field: &Field, member: &Member) -> TokenStream {
         let self_var = &params.self_var;
+
         match (params.is_remote, field.attrs.getter()) {
             (false, None) => {
                 if params.is_packed {
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_and(&mut _s);
                         ::quote::__private::push_group(
                             &mut _s,
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&self_var, &mut _s);
                                 ::quote::__private::push_dot(&mut _s);
                                 ::quote::ToTokens::to_tokens(&member, &mut _s);
@@ -20130,6 +22452,7 @@ mod ser {
                 } else {
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_and(&mut _s);
                         ::quote::ToTokens::to_tokens(&self_var, &mut _s);
                         ::quote::__private::push_dot(&mut _s);
@@ -20142,12 +22465,14 @@ mod ser {
                 let inner = if params.is_packed {
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_and(&mut _s);
                         ::quote::__private::push_group(
                             &mut _s,
                             ::quote::__private::Delimiter::Brace,
                             {
                                 let mut _s = ::quote::__private::TokenStream::new();
+
                                 ::quote::ToTokens::to_tokens(&self_var, &mut _s);
                                 ::quote::__private::push_dot(&mut _s);
                                 ::quote::ToTokens::to_tokens(&member, &mut _s);
@@ -20159,6 +22484,7 @@ mod ser {
                 } else {
                     {
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         ::quote::__private::push_and(&mut _s);
                         ::quote::ToTokens::to_tokens(&self_var, &mut _s);
                         ::quote::__private::push_dot(&mut _s);
@@ -20166,9 +22492,12 @@ mod ser {
                         _s
                     }
                 };
+
                 let ty = field.ty;
+
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "__private");
@@ -20185,6 +22514,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&inner, &mut _s);
                             _s
                         },
@@ -20194,8 +22524,10 @@ mod ser {
             }
             (true, Some(getter)) => {
                 let ty = field.ty;
+
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "_serde");
                     ::quote::__private::push_colon2(&mut _s);
                     ::quote::__private::push_ident(&mut _s, "__private");
@@ -20212,6 +22544,7 @@ mod ser {
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_and(&mut _s);
                             ::quote::ToTokens::to_tokens(&getter, &mut _s);
                             ::quote::__private::push_group(
@@ -20219,6 +22552,7 @@ mod ser {
                                 ::quote::__private::Delimiter::Parenthesis,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::ToTokens::to_tokens(&self_var, &mut _s);
                                     _s
                                 },
@@ -20236,23 +22570,28 @@ mod ser {
             }
         }
     }
+
     fn effective_style(variant: &Variant) -> Style {
         match variant.style {
             Style::Newtype if variant.fields[0].attrs.skip_serializing() => Style::Unit,
             other => other,
         }
     }
+
     enum StructTrait {
         SerializeMap,
         SerializeStruct,
         SerializeStructVariant,
     }
+
     impl StructTrait {
         fn serialize_field(&self, span: Span) -> TokenStream {
             match *self {
                 StructTrait::SerializeMap => {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     let _span: ::quote::__private::Span = span;
+
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
                     ::quote::__private::push_colon2_spanned(&mut _s, _span);
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "ser");
@@ -20272,7 +22611,9 @@ mod ser {
                 }
                 StructTrait::SerializeStruct => {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     let _span: ::quote::__private::Span = span;
+
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
                     ::quote::__private::push_colon2_spanned(&mut _s, _span);
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "ser");
@@ -20292,7 +22633,9 @@ mod ser {
                 }
                 StructTrait::SerializeStructVariant => {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     let _span: ::quote::__private::Span = span;
+
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
                     ::quote::__private::push_colon2_spanned(&mut _s, _span);
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "ser");
@@ -20312,13 +22655,16 @@ mod ser {
                 }
             }
         }
+
         fn skip_field(&self, span: Span) -> Option<TokenStream> {
             match *self {
                 StructTrait::SerializeMap => None,
                 StructTrait::SerializeStruct => {
                     Some({
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         let _span: ::quote::__private::Span = span;
+
                         ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
                         ::quote::__private::push_colon2_spanned(&mut _s, _span);
                         ::quote::__private::push_ident_spanned(&mut _s, _span, "ser");
@@ -20340,7 +22686,9 @@ mod ser {
                 StructTrait::SerializeStructVariant => {
                     Some({
                         let mut _s = ::quote::__private::TokenStream::new();
+
                         let _span: ::quote::__private::Span = span;
+
                         ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
                         ::quote::__private::push_colon2_spanned(&mut _s, _span);
                         ::quote::__private::push_ident_spanned(&mut _s, _span, "ser");
@@ -20362,17 +22710,21 @@ mod ser {
             }
         }
     }
+
     enum TupleTrait {
         SerializeTuple,
         SerializeTupleStruct,
         SerializeTupleVariant,
     }
+
     impl TupleTrait {
         fn serialize_element(&self, span: Span) -> TokenStream {
             match *self {
                 TupleTrait::SerializeTuple => {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     let _span: ::quote::__private::Span = span;
+
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
                     ::quote::__private::push_colon2_spanned(&mut _s, _span);
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "ser");
@@ -20392,7 +22744,9 @@ mod ser {
                 }
                 TupleTrait::SerializeTupleStruct => {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     let _span: ::quote::__private::Span = span;
+
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
                     ::quote::__private::push_colon2_spanned(&mut _s, _span);
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "ser");
@@ -20412,7 +22766,9 @@ mod ser {
                 }
                 TupleTrait::SerializeTupleVariant => {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     let _span: ::quote::__private::Span = span;
+
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "_serde");
                     ::quote::__private::push_colon2_spanned(&mut _s, _span);
                     ::quote::__private::push_ident_spanned(&mut _s, _span, "ser");
@@ -20434,24 +22790,30 @@ mod ser {
         }
     }
 }
+
 mod try {
     use proc_macro2::{Punct, Spacing, TokenStream};
+
     pub fn replacement() -> TokenStream {
         let dollar = Punct::new('$', Spacing::Alone);
+
         {
             let mut _s = ::quote::__private::TokenStream::new();
+
             ::quote::__private::push_pound(&mut _s);
             ::quote::__private::push_group(
                 &mut _s,
                 ::quote::__private::Delimiter::Bracket,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_ident(&mut _s, "allow");
                     ::quote::__private::push_group(
                         &mut _s,
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "unused_macros");
                             _s
                         },
@@ -20467,11 +22829,13 @@ mod try {
                 ::quote::__private::Delimiter::Brace,
                 {
                     let mut _s = ::quote::__private::TokenStream::new();
+
                     ::quote::__private::push_group(
                         &mut _s,
                         ::quote::__private::Delimiter::Parenthesis,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::ToTokens::to_tokens(&dollar, &mut _s);
                             ::quote::__private::push_ident(&mut _s, "__expr");
                             ::quote::__private::push_colon(&mut _s);
@@ -20485,6 +22849,7 @@ mod try {
                         ::quote::__private::Delimiter::Brace,
                         {
                             let mut _s = ::quote::__private::TokenStream::new();
+
                             ::quote::__private::push_ident(&mut _s, "match");
                             ::quote::ToTokens::to_tokens(&dollar, &mut _s);
                             ::quote::__private::push_ident(&mut _s, "__expr");
@@ -20493,6 +22858,7 @@ mod try {
                                 ::quote::__private::Delimiter::Brace,
                                 {
                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                     ::quote::__private::push_ident(&mut _s, "_serde");
                                     ::quote::__private::push_colon2(&mut _s);
                                     ::quote::__private::push_ident(&mut _s, "__private");
@@ -20503,6 +22869,7 @@ mod try {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "__val");
                                             _s
                                         },
@@ -20520,6 +22887,7 @@ mod try {
                                         ::quote::__private::Delimiter::Parenthesis,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "__err");
                                             _s
                                         },
@@ -20530,6 +22898,7 @@ mod try {
                                         ::quote::__private::Delimiter::Brace,
                                         {
                                             let mut _s = ::quote::__private::TokenStream::new();
+
                                             ::quote::__private::push_ident(&mut _s, "return");
                                             ::quote::__private::push_ident(&mut _s, "_serde");
                                             ::quote::__private::push_colon2(&mut _s);
@@ -20541,6 +22910,7 @@ mod try {
                                                 ::quote::__private::Delimiter::Parenthesis,
                                                 {
                                                     let mut _s = ::quote::__private::TokenStream::new();
+
                                                     ::quote::__private::push_ident(&mut _s, "__err");
                                                     _s
                                                 },
@@ -20562,6 +22932,7 @@ mod try {
         }
     }
 }
+
 #[proc_macro_derive(Serialize, attributes(serde))]
 pub fn derive_serialize(input: TokenStream) -> TokenStream {
     let mut input = match ::syn::parse_macro_input::parse::<DeriveInput>(input) {
@@ -20570,8 +22941,10 @@ pub fn derive_serialize(input: TokenStream) -> TokenStream {
             return ::syn::__private::TokenStream::from(err.to_compile_error());
         }
     };
+
     ser::expand_derive_serialize(&mut input).unwrap_or_else(to_compile_errors).into()
 }
+
 #[proc_macro_derive(Deserialize, attributes(serde))]
 pub fn derive_deserialize(input: TokenStream) -> TokenStream {
     let mut input = match ::syn::parse_macro_input::parse::<DeriveInput>(input) {
@@ -20580,32 +22953,44 @@ pub fn derive_deserialize(input: TokenStream) -> TokenStream {
             return ::syn::__private::TokenStream::from(err.to_compile_error());
         }
     };
+
     de::expand_derive_deserialize(&mut input).unwrap_or_else(to_compile_errors).into()
 }
+
 fn to_compile_errors(errors: Vec<syn::Error>) -> proc_macro2::TokenStream {
     let compile_errors = errors.iter().map(syn::Error::to_compile_error);
+
     {
         let mut _s = ::quote::__private::TokenStream::new();
+
         {
             use ::quote::__private::ext::*;
+
             let has_iter = ::quote::__private::ThereIsNoIteratorInRepetition;
+
             #[allow(unused_mut)]
             let (mut compile_errors, i) = compile_errors.quote_into_iter();
+
             let has_iter = has_iter | i;
             let _: ::quote::__private::HasIterator = has_iter;
+
             while true {
                 let compile_errors = match compile_errors.next() {
                     Some(_x) => ::quote::__private::RepInterp(_x),
                     None => break,
                 };
+
                 ::quote::ToTokens::to_tokens(&compile_errors, &mut _s);
             }
         };
+
         _s
     }
 }
+
 const _: () = {
     extern crate proc_macro;
+
     #[rustc_proc_macro_decls]
     #[allow(deprecated)]
     static _DECLS: &[proc_macro::bridge::client::ProcMacro] = &[

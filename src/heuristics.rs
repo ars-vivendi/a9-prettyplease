@@ -38,6 +38,7 @@ fn use_tree_root_ident(tree: &UseTree) -> Option<String> {
 enum ItemKind {
     Use,
     ExternCrate,
+    Mod,
     Const,
     Static,
     TypeAlias,
@@ -49,6 +50,7 @@ fn classify_item_kind(item: &Item) -> ItemKind {
     match item {
         Item::Use(_) => ItemKind::Use,
         Item::ExternCrate(_) => ItemKind::ExternCrate,
+        Item::Mod(_) => ItemKind::Mod,
         Item::Const(_) => ItemKind::Const,
         Item::Static(_) => ItemKind::Static,
         Item::Type(_) => ItemKind::TypeAlias,
@@ -59,7 +61,6 @@ fn classify_item_kind(item: &Item) -> ItemKind {
         | Item::Trait(_)
         | Item::TraitAlias(_)
         | Item::Impl(_)
-        | Item::Mod(_)
         | Item::Macro(_) => ItemKind::Definition,
         _ => ItemKind::Other,
     }
@@ -83,6 +84,7 @@ pub fn should_blank_between_items(prev: &Item, next: &Item) -> bool {
             prev_group != next_group
         }
         (ItemKind::ExternCrate, ItemKind::ExternCrate) => false,
+        (ItemKind::Mod, ItemKind::Mod) => false,
         (ItemKind::Const, ItemKind::Const) => false,
         (ItemKind::Static, ItemKind::Static) => false,
         (ItemKind::TypeAlias, ItemKind::TypeAlias) => false,
@@ -238,6 +240,15 @@ fn is_jump_stmt(stmt: &Stmt) -> bool {
     )
 }
 
+fn is_let_else(stmt: &Stmt) -> bool {
+    if let Stmt::Local(local) = stmt {
+        if let Some(init) = &local.init {
+            return init.diverge.is_some();
+        }
+    }
+    false
+}
+
 fn should_blank_between_stmts(prev: &Stmt, next: &Stmt) -> bool {
     // Tracing macro attachment takes priority
     if let Some(decision) = tracing_blank_line(prev, next) {
@@ -246,6 +257,11 @@ fn should_blank_between_stmts(prev: &Stmt, next: &Stmt) -> bool {
 
     // return / continue / break always get breathing room before them
     if is_jump_stmt(next) {
+        return true;
+    }
+
+    // let...else always gets a blank line before it
+    if is_let_else(next) {
         return true;
     }
 

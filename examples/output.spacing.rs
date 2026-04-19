@@ -141,11 +141,10 @@ impl Ipv4Addr {
             return true;
         }
 
-        !self.is_private() && !self.is_loopback() && !self.is_link_local()
-            && !self.is_broadcast() && !self.is_documentation() && !self.is_shared()
-            && !(self.octets()[0] == 192 && self.octets()[1] == 0
-                && self.octets()[2] == 0) && !self.is_reserved()
-            && !self.is_benchmarking() && self.octets()[0] != 0
+        !self.is_private() && !self.is_loopback() && !self.is_link_local() && !self.is_broadcast()
+            && !self.is_documentation() && !self.is_shared()
+            && !(self.octets()[0] == 192 && self.octets()[1] == 0 && self.octets()[2] == 0)
+            && !self.is_reserved() && !self.is_benchmarking() && self.octets()[0] != 0
     }
 
     pub const fn is_shared(&self) -> bool {
@@ -314,7 +313,10 @@ impl PartialOrd<IpAddr> for Ipv4Addr {
 
 impl Ord for Ipv4Addr {
     fn cmp(&self, other: &Ipv4Addr) -> Ordering {
-        u32::from_be(self.inner.s_addr).cmp(&u32::from_be(other.inner.s_addr))
+        u32::from_be(self.inner.s_addr)
+            .cmp(
+                &u32::from_be(other.inner.s_addr),
+            )
     }
 }
 
@@ -351,16 +353,7 @@ impl From<[u8; 4]> for IpAddr {
 }
 
 impl Ipv6Addr {
-    pub const fn new(
-        a: u16,
-        b: u16,
-        c: u16,
-        d: u16,
-        e: u16,
-        f: u16,
-        g: u16,
-        h: u16,
-    ) -> Ipv6Addr {
+    pub const fn new(a: u16, b: u16, c: u16, d: u16, e: u16, f: u16, g: u16, h: u16) -> Ipv6Addr {
         let addr16 = [
             a.to_be(),
             b.to_be(),
@@ -384,9 +377,7 @@ impl Ipv6Addr {
     pub const UNSPECIFIED: Self = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
 
     pub const fn segments(&self) -> [u16; 8] {
-        let [a, b, c, d, e, f, g, h] = unsafe {
-            transmute::<_, [u16; 8]>(self.inner.s6_addr)
-        };
+        let [a, b, c, d, e, f, g, h] = unsafe { transmute::<_, [u16; 8]>(self.inner.s6_addr) };
 
         [
             u16::from_be(a),
@@ -401,13 +392,11 @@ impl Ipv6Addr {
     }
 
     pub const fn is_unspecified(&self) -> bool {
-        u128::from_be_bytes(self.octets())
-            == u128::from_be_bytes(Ipv6Addr::UNSPECIFIED.octets())
+        u128::from_be_bytes(self.octets()) == u128::from_be_bytes(Ipv6Addr::UNSPECIFIED.octets())
     }
 
     pub const fn is_loopback(&self) -> bool {
-        u128::from_be_bytes(self.octets())
-            == u128::from_be_bytes(Ipv6Addr::LOCALHOST.octets())
+        u128::from_be_bytes(self.octets()) == u128::from_be_bytes(Ipv6Addr::LOCALHOST.octets())
     }
 
     pub const fn is_global(&self) -> bool {
@@ -435,14 +424,12 @@ impl Ipv6Addr {
     }
 
     pub const fn is_benchmarking(&self) -> bool {
-        (self.segments()[0] == 0x2001) && (self.segments()[1] == 0x2)
-            && (self.segments()[2] == 0)
+        (self.segments()[0] == 0x2001) && (self.segments()[1] == 0x2) && (self.segments()[2] == 0)
     }
 
     pub const fn is_unicast_global(&self) -> bool {
         self.is_unicast() && !self.is_loopback() && !self.is_unicast_link_local()
-            && !self.is_unique_local() && !self.is_unspecified()
-            && !self.is_documentation()
+            && !self.is_unique_local() && !self.is_unspecified() && !self.is_documentation()
     }
 
     pub const fn multicast_scope(&self) -> Option<Ipv6MulticastScope> {
@@ -546,10 +533,7 @@ impl fmt::Display for Ipv6Addr {
 
                 /// Write a colon-separated part of the address
                 #[inline]
-                fn fmt_subslice(
-                    f: &mut fmt::Formatter<'_>,
-                    chunk: &[u16],
-                ) -> fmt::Result {
+                fn fmt_subslice(f: &mut fmt::Formatter<'_>, chunk: &[u16]) -> fmt::Result {
                     if let Some((first, tail)) = chunk.split_first() {
                         write!(f, "{:x}", first)?;
 
@@ -669,7 +653,9 @@ impl AsInner<c::in6_addr> for Ipv6Addr {
 
 impl FromInner<c::in6_addr> for Ipv6Addr {
     fn from_inner(addr: c::in6_addr) -> Ipv6Addr {
-        Ipv6Addr { inner: addr }
+        Ipv6Addr {
+            inner: addr,
+        }
     }
 }
 
@@ -689,7 +675,9 @@ impl From<u128> for Ipv6Addr {
 
 impl From<[u8; 16]> for Ipv6Addr {
     fn from(octets: [u8; 16]) -> Ipv6Addr {
-        let inner = c::in6_addr { s6_addr: octets };
+        let inner = c::in6_addr {
+            s6_addr: octets,
+        };
 
         Ipv6Addr::from_inner(inner)
     }

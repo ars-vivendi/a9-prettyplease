@@ -371,7 +371,7 @@ use crate::algorithm::Printer;
 use syn::File;
 
 // Target line width.
-const MARGIN: isize = 89;
+const MARGIN: isize = 100;
 
 // Number of spaces increment at each level of block indentation.
 const INDENT: isize = 4;

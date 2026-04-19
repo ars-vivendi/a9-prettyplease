@@ -142,14 +142,37 @@ impl Printer {
     }
 
     fn expr_condition(&mut self, expr: &Expr) {
-        self.cbox(0);
-        self.expr(expr, FixupContext::new_condition());
-        if needs_newline_if_wrap(expr) {
+        if contains_let_chain(expr) {
+            self.cbox(0);
+            self.cbox(INDENT);
+            self.let_chain_clauses(expr);
+            self.end();
             self.space();
+            self.end();
         } else {
-            self.nbsp();
+            self.cbox(0);
+            self.expr(expr, FixupContext::new_condition());
+            if needs_newline_if_wrap(expr) {
+                self.space();
+            } else {
+                self.nbsp();
+            }
+            self.end();
         }
-        self.end();
+    }
+
+    fn let_chain_clauses(&mut self, expr: &Expr) {
+        if let Expr::Binary(e) = expr {
+            if matches!(e.op, BinOp::And(_)) && e.attrs.is_empty() {
+                self.let_chain_clauses(&e.left);
+                self.space();
+                self.word("&&");
+                self.nbsp();
+                self.expr(&e.right, FixupContext::new_condition());
+                return;
+            }
+        }
+        self.expr(expr, FixupContext::new_condition());
     }
 
     pub fn subexpr(&mut self, expr: &Expr, needs_paren: bool, mut fixup: FixupContext) {
@@ -185,7 +208,7 @@ impl Printer {
             self.trailing_comma(true);
             self.offset(-INDENT);
             self.word("]");
-            self.end();
+            self.end_with_max_width(60);
         } else {
             self.word("[");
             self.cbox(INDENT);
@@ -614,7 +637,7 @@ impl Printer {
             self.offset(-INDENT);
             self.word("}");
         }
-        self.end();
+        self.end_with_max_width(50);
     }
 
     fn expr_index(&mut self, expr: &ExprIndex, beginning_of_line: bool, fixup: FixupContext) {
@@ -739,7 +762,7 @@ impl Printer {
         self.cbox(INDENT);
         let unindent_call_args = beginning_of_line && is_short_ident(&expr.receiver);
         self.prefix_subexpr_method_call(expr, beginning_of_line, unindent_call_args, fixup);
-        self.end();
+        self.end_with_max_width(60);
     }
 
     fn prefix_subexpr_method_call(
@@ -875,7 +898,7 @@ impl Printer {
             self.space();
         }
         self.offset(-INDENT);
-        self.end_with_max_width(34);
+        self.end_with_max_width(18);
         self.word("}");
     }
 
@@ -1181,7 +1204,7 @@ impl Printer {
                     self.trailing_comma(arg.is_last);
                 }
                 self.offset(-INDENT);
-                self.end();
+                self.end_with_max_width(60);
             }
         }
     }
@@ -1338,6 +1361,18 @@ fn needs_newline_if_wrap(expr: &Expr) -> bool {
 
         _ => false,
     }
+}
+
+fn contains_let_chain(expr: &Expr) -> bool {
+    if let Expr::Binary(e) = expr {
+        if matches!(e.op, BinOp::And(_)) {
+            return matches!(*e.left, Expr::Let(_))
+                || matches!(*e.right, Expr::Let(_))
+                || contains_let_chain(&e.left)
+                || contains_let_chain(&e.right);
+        }
+    }
+    false
 }
 
 fn is_short_ident(expr: &Expr) -> bool {

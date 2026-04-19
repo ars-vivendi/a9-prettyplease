@@ -20,7 +20,7 @@ impl Printer {
                     self.trailing_comma_or_space(field.is_last);
                 }
                 self.offset(-INDENT);
-                self.end();
+                self.end_with_max_width(35);
                 self.word("}");
             }
             Fields::Unnamed(fields) => {

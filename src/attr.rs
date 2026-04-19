@@ -185,7 +185,7 @@ impl Printer {
                                 self.zerobreak();
                             }
                             self.offset(-INDENT);
-                            self.end();
+                            self.end_with_max_width(70);
                             self.word(")");
                             state = Punct;
                         }

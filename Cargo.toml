@@ -11,6 +11,7 @@ exclude = ["cargo-expand"]
 keywords = ["rustfmt", "prettyplease"]
 license = "MIT OR Apache-2.0"
 links = "a9prettyplease02"
+repository = "https://github.com/ars-vivendi/a9-prettyplease"
 rust-version = "1.71"
 
 [features]

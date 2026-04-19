@@ -2,11 +2,23 @@ use crate::algorithm::Printer;
 use crate::classify;
 use crate::expr;
 use crate::fixup::FixupContext;
+use crate::heuristics;
 use crate::mac;
 use crate::INDENT;
 use syn::{BinOp, Expr, Stmt};
 
 impl Printer {
+    pub fn stmts(&mut self, stmts: &[Stmt]) {
+        let blanks = heuristics::stmt_blank_lines(stmts);
+        for (index, stmt) in stmts.iter().enumerate() {
+            if blanks[index] {
+                self.hardbreak();
+            }
+            let is_last = index + 1 == stmts.len();
+            self.stmt(stmt, is_last);
+        }
+    }
+
     pub fn stmt(&mut self, stmt: &Stmt, is_last: bool) {
         match stmt {
             Stmt::Local(local) => {

@@ -48,6 +48,11 @@ impl Printer {
         self.spaces(algorithm::SIZE_INFINITY as usize);
     }
 
+    pub fn blank_line(&mut self) {
+        self.hardbreak();
+        self.hardbreak();
+    }
+
     pub fn space_if_nonempty(&mut self) {
         self.scan_break(BreakToken {
             blank_space: 1,

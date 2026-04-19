@@ -1,4 +1,5 @@
 use crate::algorithm::Printer;
+use crate::heuristics;
 use syn::File;
 
 impl Printer {
@@ -9,8 +10,15 @@ impl Printer {
             self.hardbreak();
         }
         self.inner_attrs(&file.attrs);
+        let mut prev: Option<&syn::Item> = None;
         for item in &file.items {
+            if let Some(prev_item) = prev {
+                if heuristics::should_blank_between_items(prev_item, item) {
+                    self.hardbreak();
+                }
+            }
             self.item(item);
+            prev = Some(item);
         }
         self.end();
     }

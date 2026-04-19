@@ -1,5 +1,6 @@
 use crate::algorithm::Printer;
 use crate::fixup::FixupContext;
+use crate::heuristics;
 use crate::iter::IterDelimited;
 use crate::mac;
 use crate::path::PathKind;
@@ -102,9 +103,7 @@ impl Printer {
         self.word("{");
         self.hardbreak_if_nonempty();
         self.inner_attrs(&item.attrs);
-        for stmt in item.block.stmts.iter().delimited() {
-            self.stmt(&stmt, stmt.is_last);
-        }
+        self.stmts(&item.block.stmts);
         self.offset(-INDENT);
         self.end();
         self.word("}");
@@ -121,8 +120,13 @@ impl Printer {
         self.word("{");
         self.hardbreak_if_nonempty();
         self.inner_attrs(&item.attrs);
+        let mut is_first = true;
         for foreign_item in &item.items {
+            if !is_first {
+                self.hardbreak();
+            }
             self.foreign_item(foreign_item);
+            is_first = false;
         }
         self.offset(-INDENT);
         self.end();
@@ -159,8 +163,13 @@ impl Printer {
         self.word("{");
         self.hardbreak_if_nonempty();
         self.inner_attrs(&item.attrs);
+        let mut is_first = true;
         for impl_item in &item.items {
+            if !is_first {
+                self.hardbreak();
+            }
             self.impl_item(impl_item);
+            is_first = false;
         }
         self.offset(-INDENT);
         self.end();
@@ -188,8 +197,15 @@ impl Printer {
             self.word(" {");
             self.hardbreak_if_nonempty();
             self.inner_attrs(&item.attrs);
+            let mut prev: Option<&syn::Item> = None;
             for item in items {
+                if let Some(prev_item) = prev {
+                    if heuristics::should_blank_between_items(prev_item, item) {
+                        self.hardbreak();
+                    }
+                }
                 self.item(item);
+                prev = Some(item);
             }
             self.offset(-INDENT);
             self.end();
@@ -277,8 +293,13 @@ impl Printer {
         self.word("{");
         self.hardbreak_if_nonempty();
         self.inner_attrs(&item.attrs);
+        let mut is_first = true;
         for trait_item in &item.items {
+            if !is_first {
+                self.hardbreak();
+            }
             self.trait_item(trait_item);
+            is_first = false;
         }
         self.offset(-INDENT);
         self.end();
@@ -627,8 +648,13 @@ impl Printer {
                 self.word("{");
                 self.hardbreak_if_nonempty();
                 self.inner_attrs(&item.attrs);
+                let mut is_first = true;
                 for impl_item in &item.items {
+                    if !is_first {
+                        self.hardbreak();
+                    }
                     self.impl_item(impl_item);
+                    is_first = false;
                 }
                 self.offset(-INDENT);
                 self.end();
@@ -984,9 +1010,7 @@ impl Printer {
             self.word("{");
             self.hardbreak_if_nonempty();
             self.inner_attrs(&trait_item.attrs);
-            for stmt in block.stmts.iter().delimited() {
-                self.stmt(&stmt, stmt.is_last);
-            }
+            self.stmts(&block.stmts);
             self.offset(-INDENT);
             self.end();
             self.word("}");
@@ -1183,9 +1207,7 @@ impl Printer {
         self.word("{");
         self.hardbreak_if_nonempty();
         self.inner_attrs(&impl_item.attrs);
-        for stmt in impl_item.block.stmts.iter().delimited() {
-            self.stmt(&stmt, stmt.is_last);
-        }
+        self.stmts(&impl_item.block.stmts);
         self.offset(-INDENT);
         self.end();
         self.word("}");

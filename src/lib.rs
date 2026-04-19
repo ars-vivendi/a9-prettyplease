@@ -353,6 +353,7 @@ mod expr;
 mod file;
 mod fixup;
 mod generics;
+mod heuristics;
 mod item;
 mod iter;
 mod lifetime;

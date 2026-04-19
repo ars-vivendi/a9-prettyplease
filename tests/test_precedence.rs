@@ -834,7 +834,7 @@ fn test_permutations() -> ExitCode {
     let mut assert = |mut original: Expr| {
         let span = Span::call_site();
         // `const _: () = $expr;`
-        let pretty = prettyplease::unparse(&File {
+        let pretty = a9_prettyplease::unparse(&File {
             shebang: None,
             attrs: Vec::new(),
             items: Vec::from([Item::Const(ItemConst {

@@ -39,6 +39,6 @@ fn helper() {
 }
 "#;
     let syntax_tree = syn::parse_file(code).unwrap();
-    let formatted = prettyplease::unparse(&syntax_tree);
+    let formatted = a9_prettyplease::unparse(&syntax_tree);
     print!("{}", formatted);
 }

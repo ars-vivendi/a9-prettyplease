@@ -1,12 +1,10 @@
-prettyplease::unparse
-=====================
+a9_prettyplease::unparse
+========================
 
-[<img alt="github" src="https://img.shields.io/badge/github-dtolnay/prettyplease-8da0cb?style=for-the-badge&labelColor=555555&logo=github" height="20">](https://github.com/dtolnay/prettyplease)
-[<img alt="crates.io" src="https://img.shields.io/crates/v/prettyplease.svg?style=for-the-badge&color=fc8d62&logo=rust" height="20">](https://crates.io/crates/prettyplease)
-[<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-prettyplease-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs" height="20">](https://docs.rs/prettyplease)
-[<img alt="build status" src="https://img.shields.io/github/actions/workflow/status/dtolnay/prettyplease/ci.yml?branch=master&style=for-the-badge" height="20">](https://github.com/dtolnay/prettyplease/actions?query=branch%3Amaster)
+[<img alt="crates.io" src="https://img.shields.io/crates/v/a9-prettyplease.svg?style=for-the-badge&color=fc8d62&logo=rust" height="20">](https://crates.io/crates/a9-prettyplease)
+[<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-a9--prettyplease-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs" height="20">](https://docs.rs/a9-prettyplease)
 
-A minimal `syn` syntax tree pretty-printer.
+A minimal `syn` syntax tree pretty-printer — fork of [prettyplease](https://github.com/dtolnay/prettyplease) with enhanced blank-line heuristics.
 
 <br>
 
@@ -167,7 +165,7 @@ from rustfmt-formatted code.
 
 ```rust
 // [dependencies]
-// prettyplease = "0.2"
+// a9-prettyplease = "0.2"
 // syn = { version = "2", default-features = false, features = ["full", "parsing"] }
 
 const INPUT: &str = stringify! {
@@ -184,7 +182,7 @@ const INPUT: &str = stringify! {
 
 fn main() {
     let syntax_tree = syn::parse_file(INPUT).unwrap();
-    let formatted = prettyplease::unparse(&syntax_tree);
+    let formatted = a9_prettyplease::unparse(&syntax_tree);
     print!("{}", formatted);
 }
 ```

@@ -179,7 +179,7 @@
 //!
 //! ```
 //! // [dependencies]
-//! // prettyplease = "0.2"
+//! // a9-prettyplease = "0.2"
 //! // syn = { version = "2", default-features = false, features = ["full", "parsing"] }
 //!
 //! const INPUT: &str = stringify! {
@@ -196,7 +196,7 @@
 //!
 //! fn main() {
 //!     let syntax_tree = syn::parse_file(INPUT).unwrap();
-//!     let formatted = prettyplease::unparse(&syntax_tree);
+//!     let formatted = a9_prettyplease::unparse(&syntax_tree);
 //!     print!("{}", formatted);
 //! }
 //! ```
@@ -320,7 +320,7 @@
 //! these situations with conditional punctuation tokens whose selection can be
 //! deferred and populated after it's known that the group is or is not broken.
 
-#![doc(html_root_url = "https://docs.rs/prettyplease/0.2.37")]
+#![doc(html_root_url = "https://docs.rs/a9-prettyplease/0.2.37")]
 #![allow(
     clippy::bool_to_int_with_if,
     clippy::cast_possible_wrap,

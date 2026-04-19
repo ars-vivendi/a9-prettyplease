@@ -1,17 +1,16 @@
 [package]
-name = "prettyplease"
+name = "a9-prettyplease"
 version = "0.2.37"
-authors = ["David Tolnay <dtolnay@gmail.com>"]
+authors = ["David Tolnay <dtolnay@gmail.com>", "Chanwoo Ahn"]
 autoexamples = false
 categories = ["development-tools"]
-description = "A minimal `syn` syntax tree pretty-printer"
-documentation = "https://docs.rs/prettyplease"
+description = "A minimal `syn` syntax tree pretty-printer (fork of prettyplease with enhanced blank-line heuristics)"
+documentation = "https://docs.rs/a9-prettyplease"
 edition = "2021"
 exclude = ["cargo-expand"]
-keywords = ["rustfmt"]
+keywords = ["rustfmt", "prettyplease"]
 license = "MIT OR Apache-2.0"
-links = "prettyplease02"
-repository = "https://github.com/dtolnay/prettyplease"
+links = "a9prettyplease02"
 rust-version = "1.71"
 
 [features]

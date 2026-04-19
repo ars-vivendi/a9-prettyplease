@@ -17,7 +17,7 @@ fn main() {
     let manifest_links = cargo_env_var("CARGO_MANIFEST_LINKS");
     assert!(
         pkg_version_major == "0"
-            && manifest_links == *format!("prettyplease0{}", pkg_version_minor.to_str().unwrap())
+            && manifest_links == *format!("a9prettyplease0{}", pkg_version_minor.to_str().unwrap())
     );
 }
 

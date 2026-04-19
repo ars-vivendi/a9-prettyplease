@@ -549,6 +549,7 @@ impl fmt::Display for Ipv6Addr {
                 if zeroes.len > 1 {
                     fmt_subslice(f, &segments[..zeroes.start])?;
                     f.write_str("::")?;
+
                     fmt_subslice(f, &segments[zeroes.start + zeroes.len..])
                 } else {
                     fmt_subslice(f, &segments)

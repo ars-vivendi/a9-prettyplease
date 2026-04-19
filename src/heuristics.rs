@@ -1,4 +1,4 @@
-use syn::{Expr, Item, Local, Pat, Stmt, UseTree};
+use syn::{Expr, Item, Local, Pat, Stmt, UseTree, Visibility};
 
 // ---------------------------------------------------------------------------
 // Use-group classification (unchanged)
@@ -84,7 +84,11 @@ pub fn should_blank_between_items(prev: &Item, next: &Item) -> bool {
             prev_group != next_group
         }
         (ItemKind::ExternCrate, ItemKind::ExternCrate) => false,
-        (ItemKind::Mod, ItemKind::Mod) => false,
+        (ItemKind::Mod, ItemKind::Mod) => {
+            let prev_pub = matches!(prev, Item::Mod(m) if matches!(m.vis, Visibility::Public(_)));
+            let next_pub = matches!(next, Item::Mod(m) if matches!(m.vis, Visibility::Public(_)));
+            prev_pub != next_pub
+        }
         (ItemKind::Const, ItemKind::Const) => false,
         (ItemKind::Static, ItemKind::Static) => false,
         (ItemKind::TypeAlias, ItemKind::TypeAlias) => false,

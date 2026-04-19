@@ -179,7 +179,7 @@
 //!
 //! ```
 //! // [dependencies]
-//! // a9-prettyplease = "0.2"
+//! // a9-prettyplease = "0.1"
 //! // syn = { version = "2", default-features = false, features = ["full", "parsing"] }
 //!
 //! const INPUT: &str = stringify! {
@@ -320,7 +320,7 @@
 //! these situations with conditional punctuation tokens whose selection can be
 //! deferred and populated after it's known that the group is or is not broken.
 
-#![doc(html_root_url = "https://docs.rs/a9-prettyplease/0.2.37")]
+#![doc(html_root_url = "https://docs.rs/a9-prettyplease/0.1.0")]
 #![allow(
     clippy::bool_to_int_with_if,
     clippy::cast_possible_wrap,

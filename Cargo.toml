@@ -1,6 +1,6 @@
 [package]
 name = "a9-prettyplease"
-version = "0.2.37"
+version = "0.1.0"
 authors = ["David Tolnay <dtolnay@gmail.com>", "Chanwoo Ahn"]
 autoexamples = false
 categories = ["development-tools"]
@@ -10,7 +10,7 @@ edition = "2021"
 exclude = ["cargo-expand"]
 keywords = ["rustfmt", "prettyplease"]
 license = "MIT OR Apache-2.0"
-links = "a9prettyplease02"
+links = "a9prettyplease01"
 repository = "https://github.com/ars-vivendi/a9-prettyplease"
 rust-version = "1.71"
 

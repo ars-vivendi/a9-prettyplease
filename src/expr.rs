@@ -465,7 +465,7 @@ impl Printer {
                     Expr::Match(ExprMatch { attrs, .. }) | Expr::Call(ExprCall { attrs, .. }) => {
                         attr::has_outer(attrs)
                     }
-                    body => !is_blocklike(body),
+                    body => is_block_closure_forced(body),
                 };
                 if wrap_in_brace {
                     self.cbox(INDENT);
@@ -1169,6 +1169,10 @@ impl Printer {
             self.offset(-INDENT);
             self.end();
             self.word("}");
+        } else if can_flatten_in_arm(body) {
+            self.neverbreak();
+            self.expr_beginning_of_line(body, false, true, FixupContext::new_match_arm());
+            self.word(",");
         } else {
             self.neverbreak();
             self.cbox(INDENT);
@@ -1432,6 +1436,31 @@ fn is_blocklike(expr: &Expr) -> bool {
         | Expr::Yield(_) => false,
 
         Expr::Group(e) => is_blocklike(&e.expr),
+
+        _ => false,
+    }
+}
+
+// Expressions that can appear directly as match arm bodies without wrapper
+// braces, because they have their own block structure. Matches rustfmt's
+// `can_flatten_block_around_this` for the subset of types with blocks.
+fn can_flatten_in_arm(expr: &Expr) -> bool {
+    match expr {
+        Expr::Match(_) | Expr::Loop(_) => true,
+        _ => false,
+    }
+}
+
+// Matches rustfmt's `is_block_closure_forced_inner`: expressions that must
+// be wrapped in braces when used as closure bodies.
+fn is_block_closure_forced(expr: &Expr) -> bool {
+    match expr {
+        Expr::If(_) | Expr::While(_) | Expr::ForLoop(_) | Expr::Loop(_) => true,
+
+        Expr::Reference(e) => is_block_closure_forced(&e.expr),
+        Expr::Try(e) => is_block_closure_forced(&e.expr),
+        Expr::Unary(e) => is_block_closure_forced(&e.expr),
+        Expr::Cast(e) => is_block_closure_forced(&e.expr),
 
         _ => false,
     }

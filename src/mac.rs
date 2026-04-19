@@ -144,6 +144,9 @@ impl Printer {
             IdentBang,
             Delim,
             Other,
+            Amp,
+            Pipe,
+            PipeParam,
         }
 
         use State::*;
@@ -174,6 +177,23 @@ impl Printer {
                     (false, Other)
                 }
                 (Colon, Token::Punct(':', _)) => (false, Colon2),
+                // No space after & (reference operator)
+                (Amp, Token::Ident(_)) => (false, Ident),
+                // Closure |params| — opening pipe after non-expression state
+                (Start | Other | Amp, Token::Punct('|', Spacing::Alone)) => {
+                    (state != Start, Pipe)
+                }
+                (Amp, _) => (false, Other),
+                // Inside closure params: no space after opening |
+                (Pipe, Token::Punct('|', _)) => (false, Other),
+                (Pipe, Token::Ident(_)) => (false, PipeParam),
+                (Pipe, Token::Punct('&', _)) => (false, Pipe),
+                (Pipe, _) => (false, PipeParam),
+                // Closing pipe after param: no space before |
+                (PipeParam, Token::Punct('|', _)) => (false, Other),
+                (PipeParam, Token::Punct(',', _)) => (false, Pipe),
+                // Turbofish ::<
+                (Colon2, Token::Punct('<', _)) => (false, Other),
                 (_, Token::Group(Delimiter::Parenthesis | Delimiter::Bracket, _)) => (true, Delim),
                 (_, Token::Group(Delimiter::Brace | Delimiter::None, _)) => (true, Other),
                 (_, Token::Ident(ident)) if !is_keyword(ident) => {
@@ -188,6 +208,7 @@ impl Printer {
                 }
                 (_, Token::Punct('$', _)) => (true, Dollar),
                 (_, Token::Punct('#', _)) => (true, Pound),
+                (_, Token::Punct('&', _)) => (true, Amp),
                 (_, _) => (true, Other),
             };
             if !previous_is_joint {

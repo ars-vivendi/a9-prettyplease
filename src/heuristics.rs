@@ -299,5 +299,14 @@ pub fn stmt_blank_lines(stmts: &[Stmt]) -> Vec<bool> {
     for i in 1..len {
         blanks[i] = should_blank_between_stmts(&stmts[i - 1], &stmts[i]);
     }
+    
+    // Returning or last expr which is also implicit returning should be on a separate line 
+    // for multi-statement blocks.
+    if len > 1 {
+        if let syn::Stmt::Expr(_, None) = &stmts[len - 1] {
+            blanks[len - 1] = true;
+        }
+    }
+
     blanks
 }

@@ -49,3 +49,86 @@ fn test_parenthesize_match_guard() {
         "},
     );
 }
+
+#[test]
+fn test_blank_before_continue() {
+    test(
+        quote! {
+            fn main() {
+                for i in items {
+                    errs.push(LintError { line: i });
+                    continue;
+                }
+            }
+        },
+        indoc! {"
+            fn main() {
+                for i in items {
+                    errs.push(LintError {
+                        line: i,
+                    });
+
+                    continue;
+                }
+            }
+        "},
+    );
+}
+
+#[test]
+fn test_blank_before_return() {
+    test(
+        quote! {
+            fn main() {
+                let x = compute();
+                return x;
+            }
+        },
+        indoc! {"
+            fn main() {
+                let x = compute();
+
+                return x;
+            }
+        "},
+    );
+}
+
+#[test]
+fn test_blank_before_break() {
+    test(
+        quote! {
+            fn main() {
+                loop {
+                    do_thing();
+                    break;
+                }
+            }
+        },
+        indoc! {"
+            fn main() {
+                loop {
+                    do_thing();
+
+                    break;
+                }
+            }
+        "},
+    );
+}
+
+#[test]
+fn test_no_blank_return_only_stmt() {
+    test(
+        quote! {
+            fn main() {
+                return x;
+            }
+        },
+        indoc! {"
+            fn main() {
+                return x;
+            }
+        "},
+    );
+}

@@ -228,10 +228,25 @@ fn classify_weight(stmt: &Stmt) -> StmtWeight {
     }
 }
 
+fn is_jump_stmt(stmt: &Stmt) -> bool {
+    matches!(
+        stmt,
+        Stmt::Expr(
+            Expr::Return(_) | Expr::Continue(_) | Expr::Break(_),
+            _
+        )
+    )
+}
+
 fn should_blank_between_stmts(prev: &Stmt, next: &Stmt) -> bool {
     // Tracing macro attachment takes priority
     if let Some(decision) = tracing_blank_line(prev, next) {
         return decision;
+    }
+
+    // return / continue / break always get breathing room before them
+    if is_jump_stmt(next) {
+        return true;
     }
 
     let pw = classify_weight(prev);

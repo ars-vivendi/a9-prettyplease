@@ -141,16 +141,11 @@ impl Ipv4Addr {
             return true;
         }
 
-        !self.is_private()
-            && !self.is_loopback()
-            && !self.is_link_local()
-            && !self.is_broadcast()
-            && !self.is_documentation()
-            && !self.is_shared()
-            && !(self.octets()[0] == 192 && self.octets()[1] == 0 && self.octets()[2] == 0)
-            && !self.is_reserved()
-            && !self.is_benchmarking()
-            && self.octets()[0] != 0
+        !self.is_private() && !self.is_loopback() && !self.is_link_local()
+            && !self.is_broadcast() && !self.is_documentation() && !self.is_shared()
+            && !(self.octets()[0] == 192 && self.octets()[1] == 0
+                && self.octets()[2] == 0) && !self.is_reserved()
+            && !self.is_benchmarking() && self.octets()[0] != 0
     }
 
     pub const fn is_shared(&self) -> bool {
@@ -174,10 +169,7 @@ impl Ipv4Addr {
     }
 
     pub const fn is_documentation(&self) -> bool {
-        matches!(
-            self.octets(),
-            [192, 0, 2, _] | [198, 51, 100, _] | [203, 0, 113, _]
-        )
+        matches!(self.octets(), [192, 0, 2, _] | [198, 51, 100, _] | [203, 0, 113, _])
     }
 
     pub const fn to_ipv6_compatible(&self) -> Ipv6Addr {
@@ -233,25 +225,18 @@ impl fmt::Display for Ipv4Addr {
         let octets = self.octets();
 
         if fmt.precision().is_none() && fmt.width().is_none() {
-            write!(
-                fmt,
-                "{}.{}.{}.{}",
-                octets[0], octets[1], octets[2], octets[3]
-            )
+            write!(fmt, "{}.{}.{}.{}", octets[0], octets[1], octets[2], octets[3])
         } else {
             const IPV4_BUF_LEN: usize = 15;
 
             let mut buf = [0u8; IPV4_BUF_LEN];
             let mut buf_slice = &mut buf[..];
 
-            write!(
-                buf_slice,
-                "{}.{}.{}.{}",
-                octets[0], octets[1], octets[2], octets[3]
-            )
-            .unwrap();
+            write!(buf_slice, "{}.{}.{}.{}", octets[0], octets[1], octets[2], octets[3])
+                .unwrap();
 
             let len = IPV4_BUF_LEN - buf_slice.len();
+
             let buf = unsafe { crate::str::from_utf8_unchecked(&buf[..len]) };
 
             fmt.pad(buf)
@@ -366,7 +351,16 @@ impl From<[u8; 4]> for IpAddr {
 }
 
 impl Ipv6Addr {
-    pub const fn new(a: u16, b: u16, c: u16, d: u16, e: u16, f: u16, g: u16, h: u16) -> Ipv6Addr {
+    pub const fn new(
+        a: u16,
+        b: u16,
+        c: u16,
+        d: u16,
+        e: u16,
+        f: u16,
+        g: u16,
+        h: u16,
+    ) -> Ipv6Addr {
         let addr16 = [
             a.to_be(),
             b.to_be(),
@@ -390,7 +384,9 @@ impl Ipv6Addr {
     pub const UNSPECIFIED: Self = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
 
     pub const fn segments(&self) -> [u16; 8] {
-        let [a, b, c, d, e, f, g, h] = unsafe { transmute::<_, [u16; 8]>(self.inner.s6_addr) };
+        let [a, b, c, d, e, f, g, h] = unsafe {
+            transmute::<_, [u16; 8]>(self.inner.s6_addr)
+        };
 
         [
             u16::from_be(a),
@@ -405,11 +401,13 @@ impl Ipv6Addr {
     }
 
     pub const fn is_unspecified(&self) -> bool {
-        u128::from_be_bytes(self.octets()) == u128::from_be_bytes(Ipv6Addr::UNSPECIFIED.octets())
+        u128::from_be_bytes(self.octets())
+            == u128::from_be_bytes(Ipv6Addr::UNSPECIFIED.octets())
     }
 
     pub const fn is_loopback(&self) -> bool {
-        u128::from_be_bytes(self.octets()) == u128::from_be_bytes(Ipv6Addr::LOCALHOST.octets())
+        u128::from_be_bytes(self.octets())
+            == u128::from_be_bytes(Ipv6Addr::LOCALHOST.octets())
     }
 
     pub const fn is_global(&self) -> bool {
@@ -437,15 +435,13 @@ impl Ipv6Addr {
     }
 
     pub const fn is_benchmarking(&self) -> bool {
-        (self.segments()[0] == 0x2001) && (self.segments()[1] == 0x2) && (self.segments()[2] == 0)
+        (self.segments()[0] == 0x2001) && (self.segments()[1] == 0x2)
+            && (self.segments()[2] == 0)
     }
 
     pub const fn is_unicast_global(&self) -> bool {
-        self.is_unicast()
-            && !self.is_loopback()
-            && !self.is_unicast_link_local()
-            && !self.is_unique_local()
-            && !self.is_unspecified()
+        self.is_unicast() && !self.is_loopback() && !self.is_unicast_link_local()
+            && !self.is_unique_local() && !self.is_unspecified()
             && !self.is_documentation()
     }
 
@@ -550,13 +546,15 @@ impl fmt::Display for Ipv6Addr {
 
                 /// Write a colon-separated part of the address
                 #[inline]
-                fn fmt_subslice(f: &mut fmt::Formatter<'_>, chunk: &[u16]) -> fmt::Result {
+                fn fmt_subslice(
+                    f: &mut fmt::Formatter<'_>,
+                    chunk: &[u16],
+                ) -> fmt::Result {
                     if let Some((first, tail)) = chunk.split_first() {
                         write!(f, "{:x}", first)?;
 
                         for segment in tail {
                             f.write_char(':')?;
-
                             write!(f, "{:x}", segment)?;
                         }
                     }
@@ -566,9 +564,7 @@ impl fmt::Display for Ipv6Addr {
 
                 if zeroes.len > 1 {
                     fmt_subslice(f, &segments[..zeroes.start])?;
-
                     f.write_str("::")?;
-
                     fmt_subslice(f, &segments[zeroes.start + zeroes.len..])
                 } else {
                     fmt_subslice(f, &segments)
@@ -583,6 +579,7 @@ impl fmt::Display for Ipv6Addr {
             write!(buf_slice, "{}", self).unwrap();
 
             let len = IPV6_BUF_LEN - buf_slice.len();
+
             let buf = unsafe { crate::str::from_utf8_unchecked(&buf[..len]) };
 
             f.pad(buf)

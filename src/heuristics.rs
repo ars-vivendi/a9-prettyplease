@@ -141,6 +141,10 @@ fn pat_contains_mut(pat: &Pat) -> bool {
 
 fn classify_local(local: &Local) -> StmtWeight {
     if let Some(init) = &local.init {
+        if init.diverge.is_some() {
+            return StmtWeight::Heavy;
+        }
+
         if expr_is_heavy(&init.expr) {
             return StmtWeight::Heavy;
         }

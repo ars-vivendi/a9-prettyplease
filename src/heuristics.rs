@@ -94,15 +94,19 @@ pub fn should_blank_between_items(prev: &Item, next: &Item) -> bool {
     // Same lightweight kind clusters together
     match (pk, nk) {
         (ItemKind::Use, ItemKind::Use) => {
-            let prev_group = classify_use(match prev {
+            let prev_use = match prev {
                 Item::Use(u) => u,
                 _ => unreachable!(),
-            });
-            let next_group = classify_use(match next {
+            };
+            let next_use = match next {
                 Item::Use(u) => u,
                 _ => unreachable!(),
-            });
-            prev_group != next_group
+            };
+            let prev_group = classify_use(prev_use);
+            let next_group = classify_use(next_use);
+            let prev_cfg = prev_use.attrs.iter().any(|a| a.path().is_ident("cfg"));
+            let next_cfg = next_use.attrs.iter().any(|a| a.path().is_ident("cfg"));
+            prev_group != next_group || prev_cfg != next_cfg
         }
         (ItemKind::ExternCrate, ItemKind::ExternCrate) => false,
         (ItemKind::Mod, ItemKind::Mod) => {

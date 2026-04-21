@@ -1,4 +1,4 @@
-use syn::{Expr, Item, Local, Pat, Stmt, UseTree, Visibility};
+use syn::{Expr, Item, Local, Pat, Stmt, StmtMacro, UseTree, Visibility};
 
 // ---------------------------------------------------------------------------
 // Use-group classification (unchanged)
@@ -169,25 +169,23 @@ enum TracingLevel {
     Error,
 }
 
-fn is_tracing_macro(expr: &Expr) -> Option<TracingLevel> {
-    if let Expr::Macro(m) = expr {
-        let name = m.mac.path.segments.last()?.ident.to_string();
-        match name.as_str() {
-            "trace" => Some(TracingLevel::Trace),
-            "debug" => Some(TracingLevel::Debug),
-            "info" => Some(TracingLevel::Info),
-            "warn" => Some(TracingLevel::Warn),
-            "error" => Some(TracingLevel::Error),
-            _ => None,
-        }
-    } else {
-        None
+fn tracing_level_from_macro(mac: &syn::Macro) -> Option<TracingLevel> {
+    let name = mac.path.segments.last()?.ident.to_string();
+    match name.as_str() {
+        "trace" => Some(TracingLevel::Trace),
+        "debug" => Some(TracingLevel::Debug),
+        "info" => Some(TracingLevel::Info),
+        "warn" => Some(TracingLevel::Warn),
+        "error" => Some(TracingLevel::Error),
+        _ => None,
     }
 }
 
-fn stmt_expr(stmt: &Stmt) -> Option<&Expr> {
+/// Detects tracing macros in both `Stmt::Expr(Expr::Macro, _)` and `Stmt::Macro` variants.
+fn stmt_is_tracing(stmt: &Stmt) -> Option<TracingLevel> {
     match stmt {
-        Stmt::Expr(expr, _) => Some(expr),
+        Stmt::Expr(Expr::Macro(m), _) => tracing_level_from_macro(&m.mac),
+        Stmt::Macro(StmtMacro { mac, .. }) => tracing_level_from_macro(mac),
         _ => None,
     }
 }
@@ -195,25 +193,21 @@ fn stmt_expr(stmt: &Stmt) -> Option<&Expr> {
 /// Returns Some(should_blank) if tracing attachment rules apply.
 fn tracing_blank_line(prev: &Stmt, next: &Stmt) -> Option<bool> {
     // Check if prev is a tracing macro
-    if let Some(prev_expr) = stmt_expr(prev) {
-        if let Some(level) = is_tracing_macro(prev_expr) {
-            return Some(match level {
-                TracingLevel::Trace => false,
-                TracingLevel::Debug => true,
-                TracingLevel::Info | TracingLevel::Warn | TracingLevel::Error => true,
-            });
-        }
+    if let Some(level) = stmt_is_tracing(prev) {
+        return Some(match level {
+            TracingLevel::Trace => false,
+            TracingLevel::Debug => true,
+            TracingLevel::Info | TracingLevel::Warn | TracingLevel::Error => true,
+        });
     }
 
     // Check if next is a tracing macro
-    if let Some(next_expr) = stmt_expr(next) {
-        if let Some(level) = is_tracing_macro(next_expr) {
-            return Some(match level {
-                TracingLevel::Trace => true,
-                TracingLevel::Debug => false,
-                TracingLevel::Info | TracingLevel::Warn | TracingLevel::Error => true,
-            });
-        }
+    if let Some(level) = stmt_is_tracing(next) {
+        return Some(match level {
+            TracingLevel::Trace => true,
+            TracingLevel::Debug => false,
+            TracingLevel::Info | TracingLevel::Warn | TracingLevel::Error => true,
+        });
     }
 
     None

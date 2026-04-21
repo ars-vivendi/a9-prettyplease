@@ -46,13 +46,34 @@ enum ItemKind {
     Other,
 }
 
+/// Returns `true` if a static initialiser expression contains a closure or
+/// block at any depth.  Used to distinguish simple statics (`static FOO: &str
+/// = "foo";`) from heavyweight ones (`static BAR: LazyLock<…> =
+/// LazyLock::new(|| { … });`) so that the latter get blank-line separation.
+fn static_init_is_heavy(expr: &Expr) -> bool {
+    match expr {
+        Expr::Closure(_) | Expr::Block(_) | Expr::Async(_) | Expr::Unsafe(_) => true,
+        Expr::Call(c) => c.args.iter().any(static_init_is_heavy),
+        Expr::MethodCall(mc) => {
+            static_init_is_heavy(&mc.receiver) || mc.args.iter().any(static_init_is_heavy)
+        }
+        _ => false,
+    }
+}
+
 fn classify_item_kind(item: &Item) -> ItemKind {
     match item {
         Item::Use(_) => ItemKind::Use,
         Item::ExternCrate(_) => ItemKind::ExternCrate,
         Item::Mod(_) => ItemKind::Mod,
         Item::Const(_) => ItemKind::Const,
-        Item::Static(_) => ItemKind::Static,
+        Item::Static(s) => {
+            if static_init_is_heavy(&s.expr) {
+                ItemKind::Definition
+            } else {
+                ItemKind::Static
+            }
+        }
         Item::Type(_) => ItemKind::TypeAlias,
         Item::Fn(_)
         | Item::Struct(_)

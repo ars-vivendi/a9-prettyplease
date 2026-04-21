@@ -201,3 +201,63 @@ fn main() {
         "expected log_paths to cluster with no blank, got:\n{out}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Heavy-static blank-line tests
+//
+// `static` items whose initialiser contains a closure or block body are
+// "heavyweight" and must be separated by blank lines, just like `fn`/`impl`.
+// Simple statics (literal / path inits) continue to cluster together.
+// ---------------------------------------------------------------------------
+
+/// Two simple statics should cluster (no blank between them).
+#[test]
+fn simple_statics_cluster() {
+    let code = r#"
+static FOO: &str = "foo";
+static BAR: usize = 42;
+"#;
+    let out = a9_prettyplease::unparse(&syn::parse_file(code).unwrap());
+    assert!(
+        out.contains("\"foo\";\nstatic BAR"),
+        "expected simple statics to cluster without blank, got:\n{out}"
+    );
+}
+
+/// Two heavy statics (LazyLock::new closure) must have a blank line between them.
+#[test]
+fn heavy_statics_get_blank() {
+    let code = r#"
+use std::sync::LazyLock;
+static FIRST: LazyLock<u32> = LazyLock::new(|| {
+    let x = 1;
+    x + 1
+});
+static SECOND: LazyLock<u32> = LazyLock::new(|| {
+    let y = 2;
+    y + 2
+});
+"#;
+    let out = a9_prettyplease::unparse(&syn::parse_file(code).unwrap());
+    assert!(
+        out.contains("});\n\nstatic SECOND"),
+        "expected blank line between heavy statics, got:\n{out}"
+    );
+}
+
+/// A simple static followed by a heavy static also gets a blank.
+#[test]
+fn simple_then_heavy_static_gets_blank() {
+    let code = r#"
+use std::sync::LazyLock;
+static SIMPLE: &str = "hello";
+static HEAVY: LazyLock<u32> = LazyLock::new(|| {
+    42
+});
+"#;
+    let out = a9_prettyplease::unparse(&syn::parse_file(code).unwrap());
+    assert!(
+        out.contains("\"hello\";\n\nstatic HEAVY"),
+        "expected blank line between simple and heavy static, got:\n{out}"
+    );
+}
